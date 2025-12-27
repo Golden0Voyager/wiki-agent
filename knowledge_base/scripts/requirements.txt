@@ -1,0 +1,13 @@
+openai
+pdfplumber
+python-dotenv
+google-generativeai
+python-docx
+# RAG & Vector DB
+langchain
+langchain-community
+langchain-huggingface
+langchain-chroma
+chromadb
+pypdf
+sentence-transformers
