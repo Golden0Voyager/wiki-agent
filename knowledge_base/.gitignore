@@ -1,0 +1,17 @@
+# Knowledge Base Data
+*.pdf
+*.docx
+*.doc
+
+# Python & System
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.venv/
+env/
+venv/
+.env
+
+# Vector DB (Optional, un-comment if you want to exclude the database)
+# chroma_db/
