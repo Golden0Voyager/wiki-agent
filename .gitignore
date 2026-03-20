@@ -13,5 +13,16 @@ env/
 venv/
 .env
 
-# Vector DB (Optional, un-comment if you want to exclude the database)
-# chroma_db/
+# 截获向量数据库（如果你不想把几百 MB 的索引推上云）
+chroma_db/
+*.sqlite3
+*.bin
+*.pickle
+
+# 截获 AI 工具产生的缓存
+.gemini/
+.claude/
+.pdca-status.json
+
+# 系统垃圾
+.DS_Store
