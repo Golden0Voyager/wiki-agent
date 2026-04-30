@@ -11,3 +11,9 @@ langchain-chroma
 chromadb
 pypdf
 sentence-transformers
+tenacity
+PyMuPDF
+httpx[socks]python-pptx
+pandas
+openpyxl
+tabulate
