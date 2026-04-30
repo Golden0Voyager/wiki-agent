@@ -1,0 +1,47 @@
+[project]
+name = "knowledge-base"
+version = "0.2.0"
+description = "WikiAgent — 跨领域个人知识复利系统"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+
+dependencies = [
+    # Core API
+    "fastapi>=0.136",
+    "uvicorn>=0.46",
+    "httpx>=0.28",
+    "pydantic>=2.13",
+    "loguru>=0.7",
+    "python-dotenv>=1.2",
+
+    # LLM Providers
+    "openai>=2.32",
+    "google-generativeai>=0.8",
+    "tenacity>=9.1",
+
+    # Document Parsing
+    "pymupdf>=1.27",
+    "python-docx>=1.2",
+    "python-pptx>=1.0",
+    "pandas>=3.0",
+    "openpyxl>=3.1",
+    "tabulate>=0.10",
+
+    # RAG & Vector DB
+    "langchain>=1.2",
+    "langchain-community>=0.4",
+    "langchain-huggingface>=1.2",
+    "langchain-chroma>=1.1",
+    "chromadb>=1.5",
+    "sentence-transformers>=5.4",
+    "torch>=2.11",
+]
+
+[project.scripts]
+query = "scripts.query_kb:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
