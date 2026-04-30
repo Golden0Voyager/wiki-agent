@@ -1,0 +1,19 @@
+{
+  "source": "pdf_archive",
+  "topic": "DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence",
+  "content": "【核心论点】本报告详细阐述了DeepSeek-V4系列模型如何通过架构创新和优化技术，突破大语言模型在超长上下文处理中的计算瓶颈，实现了对100万Token上下文的高效支持，从而为长时序任务和测试时扩展提供了新的范式。\n\n【支持证据】报告指出，DeepSeek-V4-Pro（1.6T参数，49B激活）和DeepSeek-V4-Flash（284B参数，13B激活）均支持百万级上下文。通过引入混合注意力机制（CSA和HCA）及Manifold-Constrained Hyper-Connections（mHC），在1M Token上下文中，V4-Pro的推理FLOPs仅为V3.2的27%，KV缓存仅为10%。此外，模型在32T-33T Token的高质量数据上进行了预训练，并采用了FP4量化感知训练和Muon优化器，显著提升了训练稳定性和效率。在基准测试中，V4-Pro-Max在知识、推理和代码任务上均超越了V3.2，并逼近GPT-5.4和Gemini-3.1-Pro的水平。\n\n【结论与建议】DeepSeek-V4的成功标志着大模型在长上下文处理效率上的重大飞跃。其核心价值在于证明了通过精细的架构设计和工程优化，可以在不牺牲性能的前提下大幅降低长文本处理的算力和内存成本。这为未来开发能够处理复杂长时序工作流和海量跨文档分析的智能体奠定了基础。",
+  "metadata": {
+    "tags": [
+      "大语言模型",
+      "长上下文处理",
+      "高效推理"
+    ],
+    "institution": "DeepSeek-AI",
+    "year": "2025",
+    "score": 9.0,
+    "score_reason": "技术深度极高，详细阐述了核心架构创新与工程优化细节，且提供了详实的基准测试数据对比。",
+    "original_file": "[大语言模型_长上下文处理]_2025_DeepSeek-AI_DeepSeek-V4_Towards_Highly_Efficient_Million-Token_Context_Intelligence.pdf"
+  },
+  "ingested_at": "2026-04-29T15:29:24.465033",
+  "hash": "7ca40782d511"
+}
