@@ -1,61 +1,224 @@
-# 知识库深度索引 (Deep Knowledge Base Index)
+# WikiAgent 🧠
 
-> 本索引由 AI 自动生成，包含每份报告的深度摘要、评分及核心观点。
+> **跨领域个人知识复利系统** — PDF 丢进去，Obsidian 知识图谱自动长出来。
 
----
-### [9] [AI开源生态发展报告](archive/%5B%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD_%E5%BC%80%E6%BA%90%E7%94%9F%E6%80%81%5D_2023_%E9%AD%94%E6%90%AD%E7%A4%BE%E5%8C%BA%2C_CCF%E5%BC%80%E6%BA%90%E5%8F%91%E5%B1%95%E6%8A%80%E6%9C%AF%E5%A7%94%E5%91%98%E4%BC%9A%2C_%E9%98%BF%E9%87%8C%E5%B7%B4%E5%B7%B4_AI%E5%BC%80%E6%BA%90%E7%94%9F%E6%80%81%E5%8F%91%E5%B1%95%E6%8A%A5%E5%91%8A.pdf)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.136%2B-009688)](https://fastapi.tiangolo.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE.md)
+[![Obsidian](https://img.shields.io/badge/Obsidian-Compatible-7C3AED)](https://obsidian.md)
 
-> **机构**: 魔搭社区, CCF开源发展技术委员会, 阿里巴巴 | **年份**: 2023 | **标签**: `人工智能` `开源生态` `科技向善`
->
-> **评分理由**: _数据详实且覆盖面广，逻辑严密，兼具技术深度与社会价值分析，是一份高质量的行业洞察报告。_
+WikiAgent 是一套**零成本、生产级**的个人知识自动化流水线。它把散落的 PDF、研报、论文自动转化为结构化的 Obsidian 知识图谱，并配备完整的向量检索与 RAG 问答能力。
 
-**【核心论点】**本报告深度剖析了AI开源生态从“代码开源”向“资源普惠”的演进范式，指出开源通过打破技术黑箱和降低边际成本，构建了开发者飞轮效应，不仅推动了生产力革命，更重塑了全球协作网络。
-
-**【支持证据】**报告引用了魔搭社区超2500万用户、17万模型及3万数据集的规模数据；指出AI业务从业者占比（37.10%）已反超技术从业者（35.28%），验证了OPC（一人公司）模式的崛起；以Qwen模型为例，展示了其全球下载量破10亿次、衍生模型超20万的全球影响力；同时，OpenRouter数据显示中国模型调用量已超越美国，标志着中国开发者正从“跟随者”转变为“贡献者”。此外，报告还列举了“小有可为”赛事催生500个解决方案及助盲眼镜等科技向善案例。
-
-**【结论与建议】**报告结论认为开源是提升AI安全水位、强化行业信任的最佳路径，也是实现“科技向善”和弥合数字鸿沟的基础设施。建议开发者利用开源工具链从“受助者”转变为“自助者”，通过应用创新和开源协作，推动中国AI生态向全球输出“Born Global”的范式。
+```
+PDF/DOCX/XLSX/PPTX ──► 多 Provider LLM 智能路由 ──► Obsidian 双链知识图谱 ──► bge-m3 向量检索 ──► RAG 问答
+```
 
 ---
 
-### [8.5] [AI开源生态发展报告](archive/%5BAI%E5%BC%80%E6%BA%90%E7%94%9F%E6%80%81_%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%5D_2023_%E9%AD%94%E6%90%AD%E7%A4%BE%E5%8C%BA_AI%E5%BC%80%E6%BA%90%E7%94%9F%E6%80%81%E6%8A%A5%E5%91%8A.pdf)
+## ✨ 核心亮点
 
-> **机构**: 魔搭社区 | **年份**: 2023 | **标签**: `AI开源生态` `魔搭社区` `人工智能`
->
-> **评分理由**: _数据详实且结构严谨，结合了宏观数据与微观案例，具有很高的行业参考价值。_
-
-**【核心论点】**本报告深度剖析了中国AI开源生态的演进逻辑，核心观点在于AI开源已从传统的“代码开源”升级为涵盖模型权重、数据集及工具链的“资源普惠”，成为推动技术平权、产业落地与全球协作的基础设施。
-
-**【支持证据】**报告提供了详实的数据支撑，如魔搭社区拥有超2500万用户、17万个模型及3万个数据集；开发者画像显示AI业务从业者占比（37.10%）已反超传统AI技术从业者（35.28%），且65%的开发者立志成为全球技术贡献者。典型案例包括千问（Qwen）模型超10亿次下载及“小有可为”赛事中助盲眼镜等低成本创新项目。
-
-**【结论与建议】**结论指出，开源通过降低研发边际成本，赋能超级个体（OPC）和跨界开发者，重塑了生产力与生产关系。建议关注开源社区在安全治理、科技向善及全球化应用层面的深度价值，将其视为AI时代不可替代的“数字基础设施”。
-
----
-
-### [9.0] [DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence](archive/%5B%E5%A4%A7%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B_%E9%95%BF%E4%B8%8A%E4%B8%8B%E6%96%87%E5%A4%84%E7%90%86%5D_2025_DeepSeek-AI_DeepSeek-V4_Towards_Highly_Efficient_Million-Token_Context_Intelligence.pdf)
-
-> **机构**: DeepSeek-AI | **年份**: 2025 | **标签**: `大语言模型` `长上下文处理` `高效推理`
->
-> **评分理由**: _技术深度极高，详细阐述了核心架构创新与工程优化细节，且提供了详实的基准测试数据对比。_
-
-**【核心论点】**本报告详细阐述了DeepSeek-V4系列模型如何通过架构创新和优化技术，突破大语言模型在超长上下文处理中的计算瓶颈，实现了对100万Token上下文的高效支持，从而为长时序任务和测试时扩展提供了新的范式。
-
-**【支持证据】**报告指出，DeepSeek-V4-Pro（1.6T参数，49B激活）和DeepSeek-V4-Flash（284B参数，13B激活）均支持百万级上下文。通过引入混合注意力机制（CSA和HCA）及Manifold-Constrained Hyper-Connections（mHC），在1M Token上下文中，V4-Pro的推理FLOPs仅为V3.2的27%，KV缓存仅为10%。此外，模型在32T-33T Token的高质量数据上进行了预训练，并采用了FP4量化感知训练和Muon优化器，显著提升了训练稳定性和效率。在基准测试中，V4-Pro-Max在知识、推理和代码任务上均超越了V3.2，并逼近GPT-5.4和Gemini-3.1-Pro的水平。
-
-**【结论与建议】**DeepSeek-V4的成功标志着大模型在长上下文处理效率上的重大飞跃。其核心价值在于证明了通过精细的架构设计和工程优化，可以在不牺牲性能的前提下大幅降低长文本处理的算力和内存成本。这为未来开发能够处理复杂长时序工作流和海量跨文档分析的智能体奠定了基础。
+| 特性 | 说明 |
+|---|---|
+| 🚀 **零成本 LLM 路由** | 集成 12+ 免费 API Provider，智能降级，单文档处理成本 ≈ ¥0 |
+| 📊 **图表 OCR** | PyMuPDF + DeepSeek 视觉模型，不只提取文字，连图表都能读懂 |
+| 🔗 **Obsidian 原生兼容** | 自动生成实体卡片、概念卡片、来源页面，双链链接即开即用 |
+| 🔍 **bge-m3 向量检索** | 中文语义检索 + 相似度评分，常驻 HTTP 服务消除每次 10-15s 加载 |
+| 👁️ **目录自动监控** | `incoming/` 放入 PDF，watcher 每 15 分钟自动处理 |
+| ⚡ **Circuit Breaker** | Provider 连续失败自动熔断，冷却结束后自动探测恢复 |
+| 🛡️ **NVIDIA 配额监控** | 令牌桶限流 + 月度请求预算追踪，触顶前自动降级 |
+| 🔄 **幂等向量同步** | 同一文档重复摄入不产生重复 chunk，确定性 ID 覆盖旧数据 |
 
 ---
 
-### [8.8] [人工智能与游戏产业的协同进化研究](archive/%5B%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD_%E6%B8%B8%E6%88%8F%E4%BA%A7%E4%B8%9A%5D_2026_%E5%A4%A7%E6%B9%BE%E5%8C%BA%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%BA%94%E7%94%A8%E7%A0%94%E7%A9%B6%E9%99%A2_%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E4%B8%8E%E6%B8%B8%E6%88%8F%E4%BA%A7%E4%B8%9A%E7%9A%84%E5%8D%8F%E5%90%8C%E8%BF%9B%E5%8C%96%E7%A0%94%E7%A9%B6.pdf)
+## 🏗️ 系统架构
 
-> **机构**: 大湾区人工智能应用研究院 | **年份**: 2026 | **标签**: `人工智能` `游戏产业` `跨行业应用`
->
-> **评分理由**: _联合头部企业出品，数据详实（含问卷、具体效能数据），逻辑严密且案例丰富，兼具前瞻性与实操性，但在部分前沿技术（如世界模型）的落地路径上略显概念化。_
+```mermaid
+graph TB
+    subgraph "Layer 1: 文档摄入"
+        INGEST["📄 ingest_documents.py<br/>PDF/DOCX/XLSX/PPTX/IMG<br/>+ DeepSeek OCR"]
+        WATCH["👁️ watcher.py<br/>监控 incoming/ 目录"]
+    end
 
-**【核心论点】**本报告系统性地提出了“AI与游戏双向赋能”的核心观点。上篇论证AI技术（决策式与生成式）正深度重构游戏产业链，从生产端的策划、美术、程序效率提升，到发行端的精准营销，推动行业从劳动密集型向智能化、创意驱动转型，并可能催生“千人千面”的个性化游戏体验及UGC商业模式。下篇则从本体论出发，指出游戏是现实世界的“逻辑投影”与高保真仿真器，其蕴含的物理规则（时空几何、动力学）和社会规则（经济博弈、协作）为AI提供了低成本、零风险的训练场，赋能AI在数据供给（如GTA V合成数据）和算法迭代（如AlphaStar、绝悟）上的突破，并外溢至自动驾驶、医疗诊断、工业制造及教育等广阔领域。
+    subgraph "Layer 2: API 队列"
+        API["⚡ api.py :8000<br/>FastAPI + 3 并发 Worker"]
+    end
 
-**【支持证据】**1. 行业数据：2025年国内22家代表游戏企业AI生产侧应用率达86.36%；中国游戏市场2025年规模达3507.9亿元，但用户增速降至1.3%，进入存量竞争，ARPU值提升至513.7元。2. 生产效能：三七互娱AI季度生成图片50万张，效率提升80%；代码生成准确率达80%，节省人力成本30%；腾讯GoSkinning工具将蒙皮工作从数天压缩至分钟级，效率提升8倍。3. 跨行业案例：腾讯TAD Sim仿真平台日均测试超1000万公里，解决自动驾驶长尾场景问题；绝悟RLogist将病理阅片效率提升400%；网易“灵掘”机器人在矿山作业中实现70%时间无人干预。4. 调研数据：63.6%从业者每天使用AI工具，但57.6%的人认为AI生成内容直接可用率低于30%，质量不稳定是最大障碍。
+    subgraph "Layer 3: 知识提纯引擎"
+        WIKI["🧠 wiki_service.py<br/>Extract → Generate → Index"]
+    end
 
-**【结论与建议】**报告认为游戏产业已超越娱乐属性，成为AI技术迭代和跨行业赋能的核心基础设施。对于游戏企业，建议短期聚焦AI单点提效（如美术、代码），中期布局管线压缩与UGC平台生态，长期探索世界模型驱动的原生游戏体验；对于AI研究者，应重视游戏作为通往AGI的训练场价值，利用游戏环境进行算法验证与泛化；对于其他行业（如自动驾驶、医疗），建议积极引入游戏引擎构建的仿真环境，降低试错成本与安全风险。报告预测，随着生产力平权，中小团队将崛起，头部厂商竞争焦点将转向UGC平台生态的构建。
+    subgraph "Layer 4: 向量化存储"
+        VEC["🔍 vector_service.py :8001<br/>bge-m3 + ChromaDB (MPS)"]
+    end
+
+    subgraph "Layer 5: 智能检索"
+        RAG["💬 rag_qa.py / query_kb.py<br/>向量检索 + LLM 问答"]
+    end
+
+    WATCH --> INGEST --> API --> WIKI --> VEC --> RAG
+```
 
 ---
 
+## 🚀 快速开始
+
+### 1. 克隆与安装
+
+```bash
+git clone https://github.com/yourname/knowledge_base.git
+cd knowledge_base
+
+# 使用 uv 安装依赖（推荐）
+uv sync
+
+# 或使用 pip
+pip install -r scripts/requirements.txt
+```
+
+### 2. 配置 API Key
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入你拥有的免费 Key（逗号分隔多个 Key）
+```
+
+支持 Provider 及获取方式：
+
+| Provider | 免费额度 | 获取地址 |
+|---|---|---|
+| NVIDIA NIM | 1,000 req/month | [build.nvidia.com](https://build.nvidia.com) |
+| Groq | 慷慨免费层 | [console.groq.com](https://console.groq.com) |
+| ModelScope | 每日 2,000 次 | [modelscope.cn](https://modelscope.cn) |
+| AIHubMix | 免费模型池 | [aihubmix.com](https://aihubmix.com) |
+| OpenRouter | 每日免费限额 | [openrouter.ai](https://openrouter.ai) |
+| ZhipuAI | 免费额度 | [open.bigmodel.cn](https://open.bigmodel.cn) |
+| Tencent TokenHub | 100万 token 免费 | [tokenhub.tencentmaas.com](https://tokenhub.tencentmaas.com) |
+
+> 💡 **不需要全部配置**，系统会自动检测可用的 Provider 并构建优先级链。
+
+### 3. 一键启动
+
+```bash
+./start.sh
+```
+
+启动三个常驻服务：
+- **Vector Service** `http://127.0.0.1:8001` — bge-m3 预加载，提供向量检索
+- **Uvicorn API** `http://127.0.0.1:8000` — 3 Worker 并发处理摄入队列
+- **Directory Watcher** — 每 15 分钟扫描 `incoming/`
+
+### 4. 投递文档
+
+```bash
+# 方式 A：直接放入，watcher 自动处理
+cp your-report.pdf incoming/
+
+# 方式 B：手动立即触发
+.venv/bin/python scripts/ingest_documents.py
+```
+
+### 5. 查看知识图谱
+
+在 Obsidian 中打开 `wiki/` 文件夹，即可看到自动生成的实体、概念和双向链接。
+
+---
+
+## 🧭 Provider 智能路由策略
+
+WikiAgent 将 LLM 调用拆分为 **Extract**（结构化提取）和 **Generate**（创意生成）两条独立链路，各有 6-11 个 Provider 自动降级。
+
+### Extract 链（结构化任务）
+
+```
+NVIDIA-Qwen3 ──► NVIDIA-Mistral ──► NVIDIA-Minimax ──► NVIDIA-Llama ──► NVIDIA-Gemma
+     │
+     ▼
+Groq ──► ModelScope ──► AIHubMix ──► OpenRouter ──► ZhipuAI ──► Tencent
+```
+
+- **NVIDIA 池**优先：5 个模型轮询，B200 原生推理，TTFT < 100ms
+- **429 错误**：轮换 Key + 指数退避，不消耗通用重试次数
+- **400/403 错误**：直接跳过当前 Provider，不再浪费时间重试
+- **月度配额触顶**：自动降级到 Groq/ModelScope
+
+### Generate 链（创意生成）
+
+```
+Tencent-TokenHub/hy3-preview ──► AIHubMix-Kimi ──► AIHubMix-MiniMax ──► AIHubMix-GLM5
+     │
+     ▼
+OpenRouter ──► ZhipuAI ──► Tencent
+```
+
+- **TokenHub L1**：100万免费 token，负责高质量中文生成
+- 全链熔断：连续 3 次失败进入 60s 冷却，冷却结束允许单次探测
+
+---
+
+## 📁 项目结构
+
+```
+knowledge_base/
+├── 📄 api.py                    # FastAPI 后端 + 并发 Worker 队列
+├── ⚙️  config.py                 # Pydantic Settings 配置中心
+├── 🧠 wiki_service.py           # 核心知识提纯引擎（Extract/Generate 双链）
+├── 📦 scripts/
+│   ├── 📄 ingest_documents.py   # PDF/DOCX 摄入 + AI 元数据提取 + 重命名
+│   ├── 🔍 query_kb.py           # 纯向量检索 CLI
+│   ├── 💬 rag_qa.py             # RAG 问答终端（ModelScope + OpenRouter 池）
+│   ├── 🗂️  sync_vector_db.py      # 向量库幂等同步 + 统一检索接口
+│   ├── 📡 vector_service.py     # 常驻 HTTP 向量检索服务 (:8001)
+│   ├── 👁️ watcher.py             # 目录监控，自动调用 ingest_documents
+│   └── 🔄 retry_raw_ingest.py   # 重试 raw/ 目录历史记录
+├── 📁 wiki/                     # Obsidian 知识库（实体/概念/来源）
+├── 📁 incoming/                 # 文档投递口
+├── 📁 archive/                  # 处理完成的 PDF 归档
+├── 📁 chroma_db/                # ChromaDB 向量存储
+├── 📁 docs/                     # 设计文档（API 策略、路线图）
+├── 📄 INDEX.md                  # 知识库索引（AI 自动生成的报告摘要）
+└── 📄 start.sh                  # 一键启动 / 停止 / 状态 / 日志
+```
+
+---
+
+## 🛠️ 技术栈
+
+| 层级 | 技术 |
+|---|---|
+| **API 框架** | FastAPI, Uvicorn, Pydantic |
+| **LLM 调用** | OpenAI SDK, 12+ Provider 适配 |
+| **文档解析** | PyMuPDF, python-docx, python-pptx, pandas, openpyxl |
+| **图表 OCR** | DeepSeek 视觉模型 |
+| **向量检索** | BAAI/bge-m3, ChromaDB, LangChain |
+| **知识图谱** | Obsidian Markdown + 双链语法 |
+| **配置管理** | Pydantic Settings, python-dotenv |
+| **任务队列** | asyncio.Queue + 并发 Worker |
+
+---
+
+## 📖 使用场景
+
+### 场景 1：研报归档
+> 每天收到 5-10 份券商研报，丢进 `incoming/`，系统自动提取核心论点、支持证据、投资建议，生成带评分的知识卡片。
+
+### 场景 2：论文阅读
+> 读完一篇论文后把 PDF 放入，系统自动提取创新点、方法、实验结果，生成概念卡片和实体关联。
+
+### 场景 3：团队知识库
+> 多人共享一个 Git 仓库的 `wiki/` 目录，每个人都在 Obsidian 中查看和编辑同一份知识图谱。
+
+---
+
+## 🤝 贡献
+
+欢迎 Issue 和 PR！如果你发现了新的免费 API Provider，或者想优化 Prompt 策略，随时提交。
+
+---
+
+## 📜 许可证
+
+[MIT](LICENSE.md) © Haining Yu
+
+---
+
+> 🌟 **如果这个项目对你有帮助，请点个 Star**，让更多人看到零成本知识自动化的可能性。
