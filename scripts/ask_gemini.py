@@ -68,7 +68,7 @@ def ask_gemini(query):
 
     print(f"🤖 正在调用 Gemini 生成回答...")
 
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    model = genai.GenerativeModel('gemini-3.1-pro')
 
     try:
         response = model.generate_content(prompt)
