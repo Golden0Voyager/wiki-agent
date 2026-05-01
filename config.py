@@ -22,13 +22,16 @@ class Settings(BaseSettings):
     aihubmix_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
     zhipuai_api_key: Optional[str] = None
+    zhipuai_api_key_backup: Optional[str] = None
     hunyuan_api_key: Optional[str] = None
+    tokenhub_api_key: Optional[str] = None    # 腾讯 TokenHub (hy3-preview)
     ai_api_key: Optional[str] = None          # 兼容旧配置名
     gemini_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
 
     # ── Provider Base URLs ────────────────────────────────────────
     hunyuan_base_url: str = "https://api.hunyuan.cloud.tencent.com/v1"
+    tokenhub_base_url: str = "https://tokenhub.tencentmaas.com/v1"
     ai_api_base: Optional[str] = None
 
     # ── Circuit Breaker 参数 ─────────────────────────────────────

@@ -15,6 +15,131 @@ from config import settings
 # 不可重试的 HTTP 状态码 — 遇到后直接跳到下一个 Provider
 NON_RETRYABLE_STATUS = {400, 401, 403, 422}
 
+# ── NVIDIA NIM 免费 tier 策略参数 ─────────────────────────
+NVIDIA_RPM_LIMIT = 24                    # 留 40% 余量，实际硬顶 40 RPM
+NVIDIA_MONTHLY_REQUEST_BUDGET = 1000     # 免费 tier 月度请求上限（按请求数计）
+NVIDIA_REQUEST_WARN_THRESHOLD = 0.8      # 80% 预警线
+
+
+class NvidiaRateLimiter:
+    """NVIDIA NIM 免费 tier 专用速率限制器 + 请求数监控
+
+    单例模式，进程内共享令牌桶和请求计数。
+    持久化到 .nvidia_usage.json，重启后数据不丢失。
+    
+    注意: NVIDIA 免费 tier 实际限制为:
+      - 速率: 40 RPM (burst ~10 RPM sustained)
+      - 月度: ~1,000 requests/month (按请求数计，非 credits)
+      - 页面上不显示余额，只显示 Rate Limits
+    """
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
+
+        # 令牌桶 (限流 24 RPM)
+        self._tokens = float(NVIDIA_RPM_LIMIT)
+        self._last_refill = time.monotonic()
+        self._lock = asyncio.Lock()
+
+        # 请求数追踪 (按月重置)
+        self._usage_file = Path(__file__).parent / ".nvidia_usage.json"
+        self._requests_this_month = 0
+        self._current_month = datetime.now().strftime("%Y-%m")
+        self._load_usage()
+
+    def _load_usage(self):
+        if self._usage_file.exists():
+            try:
+                data = json.loads(self._usage_file.read_text())
+                saved_month = data.get("month", "")
+                if saved_month == self._current_month:
+                    self._requests_this_month = data.get("requests", 0)
+                else:
+                    # 新月自动重置
+                    self._requests_this_month = 0
+            except Exception:
+                self._requests_this_month = 0
+
+    def _save_usage(self):
+        try:
+            remaining = max(0, NVIDIA_MONTHLY_REQUEST_BUDGET - self._requests_this_month)
+            self._usage_file.write_text(
+                json.dumps(
+                    {
+                        "requests": self._requests_this_month,
+                        "budget": NVIDIA_MONTHLY_REQUEST_BUDGET,
+                        "remaining": remaining,
+                        "percent": round(self._requests_this_month / NVIDIA_MONTHLY_REQUEST_BUDGET * 100, 1),
+                        "month": self._current_month,
+                        "updated_at": datetime.now().isoformat(),
+                    },
+                    indent=2,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save NVIDIA usage: {e}")
+
+    @property
+    def is_near_limit(self) -> bool:
+        """是否接近月度请求上限"""
+        return self._requests_this_month >= NVIDIA_MONTHLY_REQUEST_BUDGET * NVIDIA_REQUEST_WARN_THRESHOLD
+
+    @property
+    def status(self) -> dict:
+        remaining = max(0, NVIDIA_MONTHLY_REQUEST_BUDGET - self._requests_this_month)
+        return {
+            "requests": self._requests_this_month,
+            "budget": NVIDIA_MONTHLY_REQUEST_BUDGET,
+            "remaining": remaining,
+            "percent": round(self._requests_this_month / NVIDIA_MONTHLY_REQUEST_BUDGET * 100, 1),
+            "near_limit": self.is_near_limit,
+        }
+
+    async def acquire(self) -> bool:
+        """尝试获取一个请求令牌。返回 True 可继续调用，False 需降级。"""
+        if self.is_near_limit:
+            logger.warning(
+                f"⚠️  NVIDIA 本月已用 {self._requests_this_month}/{NVIDIA_MONTHLY_REQUEST_BUDGET} 请求 "
+                f"({self.status['percent']}%)。 跳过 NVIDIA 池以避免触顶。"
+            )
+            return False
+
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_refill
+            refill_rate = NVIDIA_RPM_LIMIT / 60.0  # tokens per second
+            self._tokens = min(float(NVIDIA_RPM_LIMIT), self._tokens + elapsed * refill_rate)
+            self._last_refill = now
+
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return True
+            else:
+                wait_needed = (1.0 - self._tokens) / refill_rate
+                logger.warning(
+                    f"⏳  NVIDIA rate limit active: need to wait {wait_needed:.1f}s. Downgrading."
+                )
+                return False
+
+    def record_call(self):
+        """记录一次成功的 NVIDIA 调用"""
+        self._requests_this_month += 1
+        self._save_usage()
+        logger.info(
+            f"📊  NVIDIA 本月请求: {self._requests_this_month}/{NVIDIA_MONTHLY_REQUEST_BUDGET} "
+            f"(剩余 {NVIDIA_MONTHLY_REQUEST_BUDGET - self._requests_this_month})"
+        )
+
 
 # ── Provider 配置 (含 Circuit Breaker) ────────────────────
 
@@ -59,68 +184,116 @@ class ProviderConfig:
         self._last_fail_time = time.monotonic()
 
 
-def _build_extract_chain() -> List[ProviderConfig]:
-    """构建【极速提取链】: NVIDIA NIM → Groq → ModelScope → AIHubMix → OpenRouter → ZhipuAI → Tencent"""
-    chain = []
-    
-    # L1: NVIDIA NIM (DeepSeek V4 Flash)
+def _build_nvidia_extract_pool() -> List[ProviderConfig]:
+    """构建 NVIDIA 内部多模型 Extract 池（按 JSON 稳定性 + 速度排序）"""
     keys = settings.parse_keys(settings.nvidia_api_key) or settings.parse_keys(os.getenv("NVIDAI_API_KEY"))
-    if keys:
-        chain.append(ProviderConfig("NVIDIA-NIM", "https://integrate.api.nvidia.com/v1", "deepseek-ai/deepseek-v4-flash", keys))
-    
+    if not keys:
+        return []
+
+    base = "https://integrate.api.nvidia.com/v1"
+    pool = []
+
+    # (name, model_id, size_category)
+    # size_category 用于 credits 估算: small/medium/large/xlarge
+    models = [
+        ("NVIDIA-Qwen3", "qwen/qwen3-coder-480b-a35b-instruct", "xlarge"),      # 1s, 480B, 最强
+        ("NVIDIA-Mistral", "mistralai/mistral-large-3-675b-instruct-2512", "xlarge"),  # 2s, 675B
+        ("NVIDIA-Minimax", "minimaxai/minimax-m2.7", "large"),                  # 3s, 230B
+        ("NVIDIA-Llama", "meta/llama-3.3-70b-instruct", "medium"),              # 10s, 70B
+        ("NVIDIA-Gemma", "google/gemma-4-31b-it", "small"),                     # 5s, 31B, 省 credits
+    ]
+
+    for name, model, size in models:
+        p = ProviderConfig(name, base, model, keys)
+        p._nvidia_size = size
+        pool.append(p)
+
+    return pool
+
+
+def _build_extract_chain() -> List[ProviderConfig]:
+    """构建【极速提取链】: NVIDIA Pool → Groq → ModelScope → AIHubMix → OpenRouter → ZhipuAI → Tencent"""
+    chain = []
+
+    # L1: NVIDIA 多模型池（内部 5 模型轮询，附限速器）
+    chain.extend(_build_nvidia_extract_pool())
+
     # L2: Groq (Qwen3 32B)
     keys = settings.parse_keys(settings.groq_api_key)
     if keys:
         chain.append(ProviderConfig("Groq", "https://api.groq.com/openai/v1", "qwen/qwen3-32b", keys))
-    
+
     # L3: ModelScope (DS V4 Flash)
     keys = settings.parse_keys(settings.modelscope_api_key)
     if keys:
         chain.append(ProviderConfig("ModelScope", "https://api-inference.modelscope.cn/v1", "deepseek-ai/DeepSeek-V4-Flash", keys))
-        
-    # L4: AIHubMix (GLM 4.7 Flash Free)
+
+    # L4: AIHubMix (gpt-4.1-free: 快速提取)
+    # 可用: coding-minimax-m2.7-free, gpt-4.1-free
+    # 限流: coding-glm-5.1-free, k2.6-code-preview-free
+    # 不可用: ling-2.6-flash-free(404), qwen3.6-plus-preview-free(400)
     keys = settings.parse_keys(settings.aihubmix_api_key)
     if keys:
-        chain.append(ProviderConfig("AIHubMix", "https://aihubmix.com/v1", "glm-4.7-flash-free", keys))
-        
+        chain.append(ProviderConfig("AIHubMix", "https://aihubmix.com/v1", "gpt-4.1-free", keys))
+
     # L5: OpenRouter (GLM 4.5 Air Free)
     keys = settings.parse_keys(settings.openrouter_api_key)
     if keys:
         chain.append(ProviderConfig("OpenRouter", "https://openrouter.ai/api/v1", "z-ai/glm-4.5-air:free", keys))
-        
-    # L6: ZhipuAI (GLM 4.7 Flash)
+
+    # L6: ZhipuAI 主账号 (GLM 4.7 Flash)
     keys = settings.parse_keys(settings.zhipuai_api_key)
     if keys:
         chain.append(ProviderConfig("ZhipuAI", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
-        
+
+    # L6b: ZhipuAI 备用账号 (GLM 4.7 Flash)
+    keys = settings.parse_keys(settings.zhipuai_api_key_backup)
+    if keys:
+        chain.append(ProviderConfig("ZhipuAI-Backup", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
+
     # L7: Tencent (Hunyuan Lite)
     keys = settings.parse_keys(settings.hunyuan_api_key) or settings.parse_keys(settings.ai_api_key)
     if keys:
         base = settings.hunyuan_base_url or settings.ai_api_base or "https://api.hunyuan.cloud.tencent.com/v1"
         chain.append(ProviderConfig("Tencent", base, "hunyuan-lite", keys))
-        
+
     return chain
 
 
 def _build_generate_chain() -> List[ProviderConfig]:
-    """构建【语义增强链】: AIHubMix → OpenRouter → ZhipuAI → Tencent → ModelScope → Groq → NVIDIA"""
+    """构建【语义增强链】: Tencent-TokenHub → AIHubMix → OpenRouter → ZhipuAI → Tencent-Hunyuan"""
     chain = []
     
-    # L1: AIHubMix (GLM 5.1 Air Free - 针对摘要与 Agent 编排优化)
+    # L0: Tencent TokenHub (hy3-preview: 100万免费token，主力生成)
+    keys = settings.parse_keys(settings.tokenhub_api_key)
+    if keys:
+        chain.append(ProviderConfig("Tencent-TokenHub", settings.tokenhub_base_url, "hy3-preview", keys))
+        
+    # L1: AIHubMix (k2.6-code-preview-free: 综合实力最强，hy3-preview 的 fallback)
+    # 次选: coding-minimax-m2.7-free (2.7版本大模型，实力强)
+    # 降级: coding-glm-5.1-free
+    # 不可用: ling-2.6-flash-free(404), qwen3.6-plus-preview-free(400)
     keys = settings.parse_keys(settings.aihubmix_api_key)
     if keys:
-        chain.append(ProviderConfig("AIHubMix-GLM5", "https://aihubmix.com/v1", "glm-5.1-air-free", keys))
+        chain.append(ProviderConfig("AIHubMix-Kimi", "https://aihubmix.com/v1", "k2.6-code-preview-free", keys))
+        chain.append(ProviderConfig("AIHubMix-MiniMax", "https://aihubmix.com/v1", "coding-minimax-m2.7-free", keys))
+        chain.append(ProviderConfig("AIHubMix-GLM5", "https://aihubmix.com/v1", "coding-glm-5.1-free", keys))
         
     # L2: OpenRouter (GLM 4.5 Air Free)
     keys = settings.parse_keys(settings.openrouter_api_key)
     if keys:
         chain.append(ProviderConfig("OpenRouter", "https://openrouter.ai/api/v1", "z-ai/glm-4.5-air:free", keys))
         
-    # L3: ZhipuAI (GLM 4.7 Flash)
+    # L3: ZhipuAI 主账号 (GLM 4.7 Flash)
     keys = settings.parse_keys(settings.zhipuai_api_key)
     if keys:
         chain.append(ProviderConfig("ZhipuAI", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
-        
+    
+    # L3b: ZhipuAI 备用账号 (GLM 4.7 Flash)
+    keys = settings.parse_keys(settings.zhipuai_api_key_backup)
+    if keys:
+        chain.append(ProviderConfig("ZhipuAI-Backup", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
+    
     # L4: Tencent (Hunyuan Lite)
     keys = settings.parse_keys(settings.hunyuan_api_key) or settings.parse_keys(settings.ai_api_key)
     if keys:
@@ -381,6 +554,13 @@ class WikiService:
                 skipped.append(provider.name)
                 continue
 
+            # NVIDIA 专属速率限制: 超限或 credits 不足时跳过整个 NVIDIA 池
+            if provider.name.startswith("NVIDIA-"):
+                limiter = NvidiaRateLimiter()
+                if not await limiter.acquire():
+                    skipped.append(provider.name)
+                    continue
+
             for attempt in range(max_retries):
                 try:
                     resp = await client.post(
@@ -417,7 +597,13 @@ class WikiService:
 
                     # ✅ 成功 → 重置熔断器
                     provider.mark_success()
-                    return resp.json()["choices"][0]["message"]["content"]
+                    content = resp.json()["choices"][0]["message"]["content"]
+
+                    # NVIDIA 专属: 记录请求数
+                    if provider.name.startswith("NVIDIA-"):
+                        NvidiaRateLimiter().record_call()
+
+                    return content
 
                 except Exception as e:
                     last_error = e
