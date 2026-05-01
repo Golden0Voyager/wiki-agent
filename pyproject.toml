@@ -14,12 +14,10 @@ dependencies = [
     "pydantic>=2.13",
     "loguru>=0.7",
     "python-dotenv>=1.2",
-
     # LLM Providers
     "openai>=2.32",
     "google-generativeai>=0.8",
     "tenacity>=9.1",
-
     # Document Parsing
     "pymupdf>=1.27",
     "python-docx>=1.2",
@@ -27,7 +25,6 @@ dependencies = [
     "pandas>=3.0",
     "openpyxl>=3.1",
     "tabulate>=0.10",
-
     # RAG & Vector DB
     "langchain>=1.2",
     "langchain-community>=0.4",
@@ -36,6 +33,7 @@ dependencies = [
     "chromadb>=1.5",
     "sentence-transformers>=5.4",
     "torch>=2.11",
+    "pydantic-settings>=2.14.0",
 ]
 
 [project.scripts]
