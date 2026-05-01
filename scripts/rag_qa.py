@@ -1,96 +1,221 @@
 import os
 import sys
+import time
+import json
 import warnings
+from pathlib import Path
+
 warnings.filterwarnings("ignore")
 
-from scripts.sync_vector_db import get_embeddings_model, DB_PATH
-from langchain_chroma import Chroma
+# 确保能从项目根目录导入 scripts 模块
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# 从环境变量获取 Gemini API Key
-api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    print("❌ 错误: 未找到 GEMINI_API_KEY 环境变量。\n")
-    print("请确保已在终端执行: export GEMINI_API_KEY='你的密钥'")
-    sys.exit(1)
+from scripts.sync_vector_db import search_documents
 
 
-def get_context(query, k=5):
-    """从本地向量库获取最相关的背景资料"""
-    # 复用 sync_vector_db 的模型加载函数，确保嵌入模型一致 (bge-m3)
-    embeddings = get_embeddings_model()
+# ── ModelScope 模型池（自动轮换）─────────────────────────────────
+_MODELSCOPE_MODELS = [
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "Qwen/Qwen3.5-397B-A17B",
+    "inclusionAI/Ling-2.6-1T",
+    "deepseek-ai/DeepSeek-V3.2",
+    "moonshotai/Kimi-K2.5",
+    "MiniMax/MiniMax-M1-80k",
+]
 
-    vectorstore = Chroma(
-        persist_directory=DB_PATH,
-        embedding_function=embeddings
-    )
+# 全局轮询索引
+_ms_index = 0
 
-    results = vectorstore.similarity_search_with_score(query, k=k)
-
-    context_text = ""
-    sources = set()
-
-    for i, (doc, score) in enumerate(results):
-        source_name = doc.metadata.get('source', '未知')
-        sources.add(source_name)
-        context_text += f"--- 资料片段 {i+1} (来源: {source_name}) ---\n"
-        context_text += f"{doc.page_content.strip()}\n\n"
-
-    return context_text, sources
+# OpenRouter 缓存
+_OR_CACHE_FILE = PROJECT_ROOT / ".openrouter_models.json"
+_OR_CACHE_TTL = 86400  # 24 小时
+_or_models = None  # 懒加载
 
 
-def ask_gemini(query):
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
+# ── 工具函数 ─────────────────────────────────────────────────────
 
-    print(f"🔍 正在从知识库检索相关内容...")
-    context, sources = get_context(query)
+def _get_api_key(env_name):
+    raw = os.getenv(env_name, "")
+    keys = [k.strip() for k in raw.split(",") if k.strip()]
+    return keys[0] if keys else None
 
-    if not context.strip():
-        print("⚠️ 知识库中未找到相关内容，Gemini 将基于自身知识库回答。")
-        prompt = query
-    else:
-        prompt = f"""你是一个专业的行业分析助手。请根据下面提供的【参考资料】来回答【用户问题】。
 
-【要求】:
-1. 如果资料中没有直接答案，请根据资料内容进行合理解读，并明确指出这是你的推断。
-2. 如果资料内容完全无关，请直说。
-3. 请在回答的末尾列出参考的文档来源。
-4. 回答要客观、专业、有深度。
-
-【参考资料】:
-{context}
-
-【用户问题】:
-{query}
-
-回答："""
-
-    print(f"🤖 正在调用 Gemini 生成回答...")
-
-    model = genai.GenerativeModel('gemini-3.1-pro')
-
+def _call_llm(client, model, system_prompt, user_prompt):
+    """调用单个模型，成功返回 content，失败返回 None"""
     try:
-        response = model.generate_content(prompt)
-        print("\n" + "=" * 50)
-        print("💡 Gemini 的回答：")
-        print("=" * 50 + "\n")
-        print(response.text)
-        print("\n" + "=" * 50)
-        print("📄 本次回答参考了以下文件：")
-        for s in sources:
-            print(f"- {s}")
-        print("=" * 50)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=4096,
+        )
+        if response.choices and response.choices[0].message.content:
+            return response.choices[0].message.content
+        return None
+    except Exception:
+        return None
+
+
+# ── OpenRouter 自动获取与筛选 ────────────────────────────────────
+
+def _should_refresh_or_cache():
+    if not _OR_CACHE_FILE.exists():
+        return True
+    age = time.time() - _OR_CACHE_FILE.stat().st_mtime
+    return age > _OR_CACHE_TTL
+
+
+def fetch_openrouter_rag_models(force=False):
+    """
+    从 OpenRouter API 获取免费模型列表，按 RAG 适用性筛选。
+    结果缓存到 .openrouter_models.json，24 小时内复用。
+    """
+    global _or_models
+
+    if not force and _or_models is not None:
+        return _or_models
+
+    if not force and not _should_refresh_or_cache():
+        try:
+            with open(_OR_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                _or_models = data.get("models", [])
+                return _or_models
+        except Exception:
+            pass
+
+    print("🌐 正在从 OpenRouter 获取免费模型列表...")
+    try:
+        import httpx
+        resp = httpx.get("https://openrouter.ai/api/v1/models", timeout=30)
+        resp.raise_for_status()
+        all_models = resp.json().get("data", [])
+
+        models = []
+        for m in all_models:
+            mid = m.get("id", "")
+            if not mid.endswith(":free"):
+                continue
+            # 排除小模型
+            if any(p in mid.lower() for p in ["-3b-", "-4b-", "-7b-", "-8b-", "-9b-", "-12b-", "nano", "mini", "xs"]):
+                continue
+            ctx = m.get("context_length", 0)
+            if ctx < 32768:
+                continue
+            models.append({"id": mid, "context": ctx})
+
+        # 缓存
+        with open(_OR_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"models": models, "cached_at": time.time()}, f, indent=2)
+
+        _or_models = models
+        print(f"✅ 发现 {len(models)} 个适合 RAG 的免费模型")
+        return models
 
     except Exception as e:
-        print(f"❌ 调用 Gemini 失败: {str(e)}")
+        print(f"⚠️ 获取 OpenRouter 模型失败: {e}")
+        return []
+
+
+# ── RAG 主流程 ───────────────────────────────────────────────────
+
+def main():
+    print("=" * 50)
+    print("💡 WikiAgent RAG 问答终端")
+    print("   模型: ModelScope 6 模型轮换 + OpenRouter 免费模型池")
+    print("   检索: bge-m3 + ChromaDB (常驻/本地回退)")
+    print("=" * 50)
+    print()
+
+    # 预加载 OpenRouter 缓存
+    or_models = fetch_openrouter_rag_models()
+
+    while True:
+        query = input("请输入你想问的问题: ").strip()
+        if not query:
+            continue
+        if query.lower() in ("exit", "quit", "q"):
+            break
+
+        # 1. 检索
+        print("\n🔍 正在从知识库检索相关内容...")
+        results = search_documents(query, k=5)
+        if not results:
+            print("❌ 知识库中未找到相关内容。")
+            continue
+
+        context_parts = []
+        sources = set()
+        for doc, meta, score in results:
+            context_parts.append(f"【来源: {meta.get('source', '未知')}】\n{doc}")
+            sources.add(meta.get("source", "未知"))
+        context = "\n\n---\n\n".join(context_parts)
+
+        # 2. 构建 Prompt
+        system_prompt = (
+            "你是一个基于本地知识库的问答助手。请严格根据下面提供的参考资料回答问题。"
+            "如果参考资料中没有足够信息，请明确告知'根据现有资料无法回答'，不要编造。"
+            "回答时请引用参考的文档来源。"
+        )
+        user_prompt = f"参考资料:\n\n{context}\n\n用户问题: {query}\n\n请根据参考资料回答。"
+
+        # 3. 调用 LLM（ModelScope 优先 → OpenRouter 降级）
+        print("🤖 正在调用 LLM 生成回答...")
+
+        # 3a. ModelScope 池
+        ms_key = _get_api_key("MODELSCOPE_API_KEY")
+        answer = None
+        if ms_key:
+            global _ms_index
+            from openai import OpenAI
+            client = OpenAI(api_key=ms_key, base_url="https://api-inference.modelscope.cn/v1")
+            for _ in range(len(_MODELSCOPE_MODELS)):
+                model = _MODELSCOPE_MODELS[_ms_index % len(_MODELSCOPE_MODELS)]
+                _ms_index += 1
+                print(f"  → 尝试 ModelScope / {model.split('/')[-1]} ...")
+                answer = _call_llm(client, model, system_prompt, user_prompt)
+                if answer:
+                    print(f"  ✅ ModelScope / {model.split('/')[-1]} 响应成功")
+                    break
+
+        # 3b. OpenRouter 池
+        if not answer and or_models:
+            or_key = _get_api_key("OPENROUTER_API_KEY")
+            if or_key:
+                from openai import OpenAI
+                client = OpenAI(
+                    api_key=or_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    default_headers={"HTTP-Referer": "https://localhost", "X-Title": "WikiAgent"},
+                )
+                for m in or_models:
+                    mid = m["id"]
+                    print(f"  → 尝试 OpenRouter / {mid} ...")
+                    answer = _call_llm(client, mid, system_prompt, user_prompt)
+                    if answer:
+                        print(f"  ✅ OpenRouter / {mid} 响应成功")
+                        break
+
+        # 3c. 全部失败
+        if not answer:
+            print("❌ 所有 Provider 均失败，无法生成回答。")
+            continue
+
+        # 4. 输出
+        print("\n" + "=" * 50)
+        print("💡 回答：")
+        print("=" * 50)
+        print(answer)
+        print("=" * 50)
+        print(f"\n📄 本次回答参考了以下文件：")
+        for s in sorted(sources):
+            print(f"   - {s}")
+        print()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        user_query = " ".join(sys.argv[1:])
-    else:
-        user_query = input("请输入你想问的问题: ").strip()
-
-    if user_query:
-        ask_gemini(user_query)
+    main()

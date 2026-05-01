@@ -1,6 +1,7 @@
 import os
+import asyncio
 from loguru import logger
-from typing import List
+from typing import List, Tuple
 from pathlib import Path
 
 KB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -99,3 +100,34 @@ async def upsert_markdowns(file_paths: List[str]):
     except Exception as e:
         logger.exception(f"Error during ChromaDB upsert for {file_paths}")
 
+
+def search_documents(query: str, k: int = 5) -> List[Tuple[str, dict, float]]:
+    """
+    统一向量检索接口。
+    优先尝试常驻向量服务 (HTTP)，失败则回退到本地加载模型。
+    
+    返回: [(content, metadata, score), ...]
+    """
+    # 1. 尝试常驻服务
+    try:
+        import httpx
+        resp = httpx.post(
+            "http://127.0.0.1:8001/search",
+            json={"query": query, "k": k},
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            results = []
+            for r in resp.json().get("results", []):
+                results.append((r["content"], r["metadata"], r["score"]))
+            return results
+    except Exception:
+        pass  # 服务未启动或异常，回退到本地
+
+    # 2. 本地回退
+    logger.info("Vector service unavailable, falling back to local model loading...")
+    embeddings = get_embeddings_model()
+    from langchain_chroma import Chroma
+    vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
+    raw_results = vectorstore.similarity_search_with_score(query, k=k)
+    return [(doc.page_content, doc.metadata, float(score)) for doc, score in raw_results]
