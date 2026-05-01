@@ -2,14 +2,30 @@ import os
 import json
 import re
 import time
+import sys
 import httpx
 from openai import OpenAI
 import fitz  # PyMuPDF
 import docx  # python-docx
 import base64
 import shutil
+from typing import List, Dict, Any
 from urllib.parse import quote
 from tenacity import retry, wait_exponential, stop_after_attempt
+
+# ── 导入 WikiService 的 Provider 链（用于消除单点故障） ─────────────────
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
+
+try:
+    from wiki_service import (
+        ProviderConfig, _build_generate_chain,
+        NON_RETRYABLE_STATUS
+    )
+    WIKI_SERVICE_AVAILABLE = True
+except ImportError as _e:
+    print(f"⚠️ 无法导入 wiki_service Provider 链: {_e}")
+    WIKI_SERVICE_AVAILABLE = False
 
 # --- 配置 ---
 API_KEYS = [k.strip() for k in (os.getenv("ZHIPUAI_API_KEY") or "").split(",") if k.strip()]
@@ -63,6 +79,108 @@ def extract_chart_insight(base64_image: str) -> str:
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
 def safe_extract_chart_insight(base64_image: str) -> str:
     return extract_chart_insight(base64_image)
+
+
+# ── 同步版 JSON 解析与 LLM 调用（复用 wiki_service 的 Provider 链） ─────────
+
+def _extract_json_sync(raw_text: str) -> Dict[str, Any]:
+    """多策略提取 JSON，处理大模型各种包裹格式"""
+    try:
+        return json.loads(raw_text.strip())
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    match = re.search(r'```[jJ][sS][oO][nN]?\s*\n(.*?)\n\s*```', raw_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    raise ValueError(f"Cannot parse JSON from: {raw_text[:200]}")
+
+
+def _call_llm_json_sync(
+    system_prompt: str,
+    user_content: str,
+    max_retries: int = 3,
+    providers: List[ProviderConfig] = None,
+) -> Dict[str, Any]:
+    """
+    同步版 LLM 调用，遍历 Provider 优先级链，集成 Circuit Breaker。
+    供 ai_organizer.py 在文档分析阶段使用。
+    """
+    if not providers:
+        raise RuntimeError("No LLM providers configured.")
+
+    last_error = None
+    skipped = []
+
+    with httpx.Client(timeout=120.0) as client:
+        for provider in providers:
+            if not provider.is_available:
+                skipped.append(provider.name)
+                continue
+
+            for attempt in range(max_retries):
+                try:
+                    resp = client.post(
+                        f"{provider.api_base}/chat/completions",
+                        headers={"Authorization": f"Bearer {provider.current_key}"},
+                        json={
+                            "model": provider.model,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_content}
+                            ]
+                        },
+                    )
+
+                    # 不可重试错误 → 直接跳到下一个 Provider
+                    if resp.status_code in NON_RETRYABLE_STATUS:
+                        print(f"  ⚠️  [{provider.name}] Non-retryable {resp.status_code}: {resp.text[:150]}. Skipping...")
+                        provider.mark_failed()
+                        break
+
+                    # 429 Rate Limit → 轮换 Key + 指数退避
+                    if resp.status_code == 429:
+                        print(f"  ⚠️  [{provider.name}] 429 Rate Limit. Rotating key...")
+                        provider.rotate_key()
+                        time.sleep(2 * (attempt + 1))
+                        continue
+
+                    # 其他非 200 错误
+                    if resp.status_code != 200:
+                        print(f"  ⚠️  [{provider.name}] API Error {resp.status_code}: {resp.text[:200]}")
+                        resp.raise_for_status()
+
+                    # ✅ 成功 → 重置熔断器
+                    provider.mark_success()
+                    raw_text = resp.json()["choices"][0]["message"]["content"]
+                    return _extract_json_sync(raw_text)
+
+                except Exception as e:
+                    last_error = e
+                    print(f"  ⚠️  [{provider.name}] Attempt {attempt+1}/{max_retries} failed: {e}")
+                    if attempt < max_retries - 1:
+                        provider.rotate_key()
+                        time.sleep(2)
+
+            # 当前 Provider 已耗尽所有重试 → 标记失败并降级
+            provider.mark_failed()
+            print(f"  ⚠️  [{provider.name}] Exhausted. Falling back to next provider...")
+
+    if skipped:
+        print(f"  ℹ️  Skipped providers in cooldown: {', '.join(skipped)}")
+
+    raise RuntimeError(f"All providers exhausted. Last error: {last_error}")
 
 def extract_text_from_pdf(filepath):
     """使用 PyMuPDF 进行混合提取：原生文字 + 原生表格 + 智能图表 OCR"""
@@ -204,7 +322,7 @@ def extract_text(filepath):
         return extract_text_from_xlsx(filepath)
     return None
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
+@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 def analyze_content(text, original_filename):
     """调用 LLM 分析内容并评分 (支持重试与 CoT 思维链)"""
     prompt = f"""
@@ -244,11 +362,31 @@ def analyze_content(text, original_filename):
         "score_reason": "框架完整但缺乏一手数据支持"
     }}
     """
-    
+
+    # ── 路径 1: 使用 Provider 链（消除单点故障） ───────────────────────
+    if WIKI_SERVICE_AVAILABLE:
+        providers = _build_generate_chain()
+        if providers:
+            try:
+                print(f"🔄 使用 Provider 链分析文档: {' → '.join([p.name for p in providers])}")
+                return _call_llm_json_sync(
+                    system_prompt="你是一个只输出 JSON 的文档分析助手。",
+                    user_content=prompt,
+                    providers=providers
+                )
+            except Exception as e:
+                print(f"⚠️  Provider 链全部失败: {e}")
+                print("  回退到硬编码 ZhipuAI...")
+        else:
+            print("⚠️  未配置 Provider 链 API Key，回退到硬编码 ZhipuAI...")
+    else:
+        print("⚠️  wiki_service 不可用，使用硬编码 ZhipuAI...")
+
+    # ── 路径 2: 硬编码 ZhipuAI（最终兜底） ─────────────────────────────
     import random
     selected_key = random.choice(API_KEYS)
     local_client = OpenAI(api_key=selected_key, base_url=BASE_URL)
-    
+
     try:
         response = local_client.chat.completions.create(
             model=MODEL_NAME,
@@ -334,10 +472,18 @@ def process_directory():
         
         # 统一的文本提取接口
         text = extract_text(filepath)
-        if not text: continue
-            
-        meta = analyze_content(text, filename)
-        if not meta: continue
+        if not text:
+            continue
+
+        try:
+            meta = analyze_content(text, filename)
+        except Exception as e:
+            print(f"❌ 文档分析失败，跳过: {filename} | 错误: {e}")
+            continue
+
+        if not meta:
+            print(f"⏭️  分析返回空结果，跳过: {filename}")
+            continue
             
         tags_slug = "_".join(meta['tags'][:2])
         safe_title = re.sub(r'[\\/*?:"<>|]', "", meta['title'])
