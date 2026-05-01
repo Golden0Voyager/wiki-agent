@@ -9,16 +9,11 @@ from typing import List, Dict, Any
 from pathlib import Path
 from loguru import logger
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv()
+from config import settings
 
 # 不可重试的 HTTP 状态码 — 遇到后直接跳到下一个 Provider
 NON_RETRYABLE_STATUS = {400, 401, 403, 422}
-
-# Circuit Breaker 参数
-_CB_FAIL_THRESHOLD = 3       # 连续失败 N 次后触发熔断
-_CB_COOLDOWN_SECONDS = 60    # 熔断冷却期 (秒)
 
 
 # ── Provider 配置 (含 Circuit Breaker) ────────────────────
@@ -49,10 +44,10 @@ class ProviderConfig:
     @property
     def is_available(self) -> bool:
         """熔断器健康检查: 连续失败达到阈值后进入冷却期，冷却结束后允许单次探测"""
-        if self._fail_count < _CB_FAIL_THRESHOLD:
+        if self._fail_count < settings.cb_fail_threshold:
             return True
         # 冷却期已过 → HALF-OPEN，允许一次探测
-        return (time.monotonic() - self._last_fail_time) >= _CB_COOLDOWN_SECONDS
+        return (time.monotonic() - self._last_fail_time) >= settings.cb_cooldown_seconds
 
     def mark_success(self):
         """调用成功 → 重置熔断计数器"""
@@ -64,50 +59,44 @@ class ProviderConfig:
         self._last_fail_time = time.monotonic()
 
 
-def _parse_keys(env_name: str) -> List[str]:
-    """从环境变量中解析逗号分隔的 API Key 列表"""
-    raw = os.getenv(env_name, "")
-    return [k.strip() for k in raw.split(",") if k.strip()]
-
-
 def _build_extract_chain() -> List[ProviderConfig]:
     """构建【极速提取链】: NVIDIA NIM → Groq → ModelScope → AIHubMix → OpenRouter → ZhipuAI → Tencent"""
     chain = []
     
     # L1: NVIDIA NIM (DeepSeek V4 Flash)
-    keys = _parse_keys("NVIDIA_API_KEY") or _parse_keys("NVIDAI_API_KEY")
+    keys = settings.parse_keys(settings.nvidia_api_key) or settings.parse_keys(os.getenv("NVIDAI_API_KEY"))
     if keys:
         chain.append(ProviderConfig("NVIDIA-NIM", "https://integrate.api.nvidia.com/v1", "deepseek-ai/deepseek-v4-flash", keys))
     
     # L2: Groq (Qwen3 32B)
-    keys = _parse_keys("GROQ_API_KEY")
+    keys = settings.parse_keys(settings.groq_api_key)
     if keys:
         chain.append(ProviderConfig("Groq", "https://api.groq.com/openai/v1", "qwen/qwen3-32b", keys))
     
     # L3: ModelScope (DS V4 Flash)
-    keys = _parse_keys("MODELSCOPE_API_KEY")
+    keys = settings.parse_keys(settings.modelscope_api_key)
     if keys:
         chain.append(ProviderConfig("ModelScope", "https://api-inference.modelscope.cn/v1", "deepseek-ai/DeepSeek-V4-Flash", keys))
         
     # L4: AIHubMix (GLM 4.7 Flash Free)
-    keys = _parse_keys("AIHUBMIX_API_KEY")
+    keys = settings.parse_keys(settings.aihubmix_api_key)
     if keys:
         chain.append(ProviderConfig("AIHubMix", "https://aihubmix.com/v1", "glm-4.7-flash-free", keys))
         
     # L5: OpenRouter (GLM 4.5 Air Free)
-    keys = _parse_keys("OPENROUTER_API_KEY")
+    keys = settings.parse_keys(settings.openrouter_api_key)
     if keys:
         chain.append(ProviderConfig("OpenRouter", "https://openrouter.ai/api/v1", "z-ai/glm-4.5-air:free", keys))
         
     # L6: ZhipuAI (GLM 4.7 Flash)
-    keys = _parse_keys("ZHIPUAI_API_KEY")
+    keys = settings.parse_keys(settings.zhipuai_api_key)
     if keys:
         chain.append(ProviderConfig("ZhipuAI", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
         
     # L7: Tencent (Hunyuan Lite)
-    keys = _parse_keys("HUNYUAN_API_KEY") or _parse_keys("AI_API_KEY")
+    keys = settings.parse_keys(settings.hunyuan_api_key) or settings.parse_keys(settings.ai_api_key)
     if keys:
-        base = os.getenv("HUNYUAN_BASE_URL", os.getenv("AI_API_BASE", "https://api.hunyuan.cloud.tencent.com/v1"))
+        base = settings.hunyuan_base_url or settings.ai_api_base or "https://api.hunyuan.cloud.tencent.com/v1"
         chain.append(ProviderConfig("Tencent", base, "hunyuan-lite", keys))
         
     return chain
@@ -118,24 +107,24 @@ def _build_generate_chain() -> List[ProviderConfig]:
     chain = []
     
     # L1: AIHubMix (GLM 5.1 Air Free - 针对摘要与 Agent 编排优化)
-    keys = _parse_keys("AIHUBMIX_API_KEY")
+    keys = settings.parse_keys(settings.aihubmix_api_key)
     if keys:
         chain.append(ProviderConfig("AIHubMix-GLM5", "https://aihubmix.com/v1", "glm-5.1-air-free", keys))
         
     # L2: OpenRouter (GLM 4.5 Air Free)
-    keys = _parse_keys("OPENROUTER_API_KEY")
+    keys = settings.parse_keys(settings.openrouter_api_key)
     if keys:
         chain.append(ProviderConfig("OpenRouter", "https://openrouter.ai/api/v1", "z-ai/glm-4.5-air:free", keys))
         
     # L3: ZhipuAI (GLM 4.7 Flash)
-    keys = _parse_keys("ZHIPUAI_API_KEY")
+    keys = settings.parse_keys(settings.zhipuai_api_key)
     if keys:
         chain.append(ProviderConfig("ZhipuAI", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
         
     # L4: Tencent (Hunyuan Lite)
-    keys = _parse_keys("HUNYUAN_API_KEY") or _parse_keys("AI_API_KEY")
+    keys = settings.parse_keys(settings.hunyuan_api_key) or settings.parse_keys(settings.ai_api_key)
     if keys:
-        base = os.getenv("HUNYUAN_BASE_URL", os.getenv("AI_API_BASE", "https://api.hunyuan.cloud.tencent.com/v1"))
+        base = settings.hunyuan_base_url or settings.ai_api_base or "https://api.hunyuan.cloud.tencent.com/v1"
         chain.append(ProviderConfig("Tencent", base, "hunyuan-lite", keys))
         
     return chain
@@ -192,91 +181,149 @@ class WikiService:
         return set()
 
     def _save_processed_hash(self, content_hash: str):
+        """原子写入 processed_hashes.json，并保留备份副本防止损坏"""
         self._processed_hashes.add(content_hash)
         try:
-            self.processed_hashes_path.write_text(
-                json.dumps(sorted(self._processed_hashes), ensure_ascii=False, indent=2),
-                encoding="utf-8"
-            )
+            data = json.dumps(sorted(self._processed_hashes), ensure_ascii=False, indent=2)
+            temp_path = self.processed_hashes_path.with_suffix(".json.tmp")
+            backup_path = self.processed_hashes_path.with_suffix(".json.bak")
+
+            # 1. 写入临时文件
+            temp_path.write_text(data, encoding="utf-8")
+
+            # 2. 若原文件存在，先备份
+            if self.processed_hashes_path.exists():
+                self.processed_hashes_path.replace(backup_path)
+
+            # 3. 原子替换
+            temp_path.replace(self.processed_hashes_path)
         except OSError as e:
             logger.warning(f"Failed to persist processed hash: {e}")
 
-    # ── 主流程 ────────────────────────────────────────────
+    # ── 流水线步骤（可独立测试、监控、重试） ──────────────
 
-    async def process_ingest_task(self, payload: Dict[str, Any]):
-        """异步处理单条摄入任务 (由 Queue Worker 调用)"""
+    def _compute_content_hash(self, content: str) -> str:
+        return hashlib.sha256(content.encode()).hexdigest()[:12]
+
+    def _is_duplicate(self, content_hash: str, force: bool = False) -> bool:
+        return content_hash in self._processed_hashes and not force
+
+    async def _persist_raw(self, payload: Dict[str, Any], content_hash: str) -> Path:
+        """Step 2: 持久化原始 payload 到 raw/ 目录"""
+        now = datetime.now()
+        source_project = payload["source_project"]
+        raw_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_{source_project}_{content_hash}.json"
+        raw_path = self.raw_dir / raw_filename
+
+        if not raw_path.exists():
+            raw_payload = {
+                "source": source_project,
+                "topic": payload["topic"],
+                "content": payload["content"],
+                "metadata": payload.get("metadata", {}),
+                "ingested_at": now.isoformat(),
+                "hash": content_hash
+            }
+            with open(raw_path, "w", encoding="utf-8") as f:
+                json.dump(raw_payload, f, ensure_ascii=False, indent=2)
+        return raw_path
+
+    async def _run_analyze_phase(self, content: str, source_project: str, topic: str) -> Dict[str, Any]:
+        """Step 3: Analyze Phase — 实体与概念提取 (极速提取链)"""
+        purpose = self._read_file(self.schema_dir / "purpose.md")
+        analysis_prompt_tmpl = self._read_file(self.schema_dir / "analyze_prompt.md")
+        analysis_input = f"SOURCE: {source_project}\nTOPIC: {topic}\nCONTENT: {content}\n\nPURPOSE:\n{purpose}"
+        return await self._call_llm_json(
+            analysis_prompt_tmpl, analysis_input, providers=self.extract_providers)
+
+    async def _run_generate_phase(
+        self,
+        analysis_results: Dict[str, Any],
+        content: str,
+        content_hash: str,
+        source_project: str
+    ) -> str:
+        """Step 4: Generate Phase — Markdown 页面生成 (语义增强链)"""
+        candidate_context = self._build_candidate_context(analysis_results)
+        generate_prompt_tmpl = self._read_file(self.schema_dir / "generate_prompt.md")
+        gen_input = (
+            f"ANALYSIS_RESULTS: {json.dumps(analysis_results, ensure_ascii=False)}\n"
+            f"ORIGINAL_CONTENT: {content}\n\n"
+            f"CANDIDATE_CONTEXT:\n{candidate_context}"
+        )
+
+        # 替换模版变量
+        generate_prompt_tmpl = generate_prompt_tmpl.replace(
+            "{{TIMESTAMP}}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        generate_prompt_tmpl = generate_prompt_tmpl.replace("{{HASH}}", content_hash)
+        generate_prompt_tmpl = generate_prompt_tmpl.replace("{{SOURCE}}", source_project)
+
+        return await self._call_llm_text(
+            generate_prompt_tmpl, gen_input, providers=self.generate_providers)
+
+    async def _commit_results(
+        self,
+        analysis_results: Dict[str, Any],
+        source_project: str,
+        topic: str,
+        content_hash: str
+    ):
+        """Step 6: 原子提交 — 更新索引、写日志、标记已处理"""
+        async with self._file_lock:
+            self._update_and_sanitize_index(analysis_results)
+            entities = ', '.join([e['name'] for e in analysis_results.get('entities', [])])
+            log_entry = f"- **[{source_project.upper()}]**: 摄入 `{topic}`，识别实体: {entities}"
+            self._append_to_log(log_entry)
+            self._save_processed_hash(content_hash)
+
+    # ── 主流程编排器 ────────────────────────────────────────
+
+    async def process_ingest_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        异步处理单条摄入任务 (由 Queue Worker 调用)。
+        将完整流水线拆分为 7 个可独立监控的步骤。
+        """
+        source_project = payload.get("source_project", "unknown")
+        topic = payload.get("topic", "unknown")
+        content = payload.get("content", "")
+
         try:
-            source_project = payload["source_project"]
-            topic = payload["topic"]
-            content = payload["content"]
-            metadata = payload.get("metadata", {})
-
-            # 1. 去重检查
-            content_hash = hashlib.sha256(content.encode()).hexdigest()[:12]
-            if content_hash in self._processed_hashes and not payload.get("force"):
+            # Step 1: 去重检查
+            content_hash = self._compute_content_hash(content)
+            if self._is_duplicate(content_hash, payload.get("force")):
                 logger.info(f"⏭️  Skipping duplicate: {topic} (hash: {content_hash})")
-                return
+                return {"status": "skipped", "reason": "duplicate", "hash": content_hash}
 
             logger.info(f"Processing ingest task: {topic} from {source_project}")
 
-            # 2. 持久化 Raw 数据 (仅在去重通过后才写入，避免无意义的磁盘 I/O)
-            now = datetime.now()
-            raw_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_{source_project}_{content_hash}.json"
-            raw_path = self.raw_dir / raw_filename
+            # Step 2: 持久化 Raw
+            await self._persist_raw(payload, content_hash)
 
-            if not raw_path.exists():
-                raw_payload = {
-                    "source": source_project,
-                    "topic": topic,
-                    "content": content,
-                    "metadata": metadata,
-                    "ingested_at": now.isoformat(),
-                    "hash": content_hash
-                }
-                with open(raw_path, "w", encoding="utf-8") as f:
-                    json.dump(raw_payload, f, ensure_ascii=False, indent=2)
+            # Step 3: Analyze
+            analysis_results = await self._run_analyze_phase(content, source_project, topic)
+            if analysis_results.get("error"):
+                logger.error(f"Analyze phase failed for {topic}: {analysis_results['error']}")
+                return {"status": "failed", "phase": "analyze", "error": analysis_results["error"], "hash": content_hash}
 
-            purpose = self._read_file(self.schema_dir / "purpose.md")
+            # Step 4: Generate
+            generated_md = await self._run_generate_phase(
+                analysis_results, content, content_hash, source_project)
 
-            # 3. Step 1: Analyze Phase - 实体提取 (使用极速提取链)
-            analysis_prompt_tmpl = self._read_file(self.schema_dir / "analyze_prompt.md")
-            analysis_input = f"SOURCE: {source_project}\nTOPIC: {topic}\nCONTENT: {content}\n\nPURPOSE:\n{purpose}"
+            # Step 5: 写入文件
+            created_pages = self._process_generated_markdown(generated_md)
 
-            analysis_results = await self._call_llm_json(
-                analysis_prompt_tmpl, analysis_input, providers=self.extract_providers)
+            # Step 6: 提交结果（索引 + 日志 + hash）
+            await self._commit_results(analysis_results, source_project, topic, content_hash)
 
-            # 前置过滤：加载候选实体内容
-            candidate_context = self._build_candidate_context(analysis_results)
-
-            # 4. Step 2: Generate Phase (使用语义增强链)
-            generate_prompt_tmpl = self._read_file(self.schema_dir / "generate_prompt.md")
-            gen_input = f"ANALYSIS_RESULTS: {json.dumps(analysis_results, ensure_ascii=False)}\nORIGINAL_CONTENT: {content}\n\nCANDIDATE_CONTEXT:\n{candidate_context}"
-
-            # 替换模版变量
-            generate_prompt_tmpl = generate_prompt_tmpl.replace("{{TIMESTAMP}}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            generate_prompt_tmpl = generate_prompt_tmpl.replace("{{HASH}}", content_hash)
-            generate_prompt_tmpl = generate_prompt_tmpl.replace("{{SOURCE}}", source_project)
-
-            generated_md_blocks = await self._call_llm_text(
-                generate_prompt_tmpl, gen_input, providers=self.generate_providers)
-
-            # 5. 解析并写入文件
-            created_pages = self._process_generated_markdown(generated_md_blocks)
-
-            # 6. 更新索引 + 归一化清洗 + 日志 + 标记已处理 (加锁保护并发写入)
-            async with self._file_lock:
-                self._update_and_sanitize_index(analysis_results)
-                log_entry = f"- **[{source_project.upper()}]**: 摄入 `{topic}`，识别实体: {', '.join([e['name'] for e in analysis_results.get('entities', [])])}"
-                self._append_to_log(log_entry)
-                self._save_processed_hash(content_hash)
-
-            # 7. 触发 ChromaDB 同步
+            # Step 7: 向量同步
             await self._trigger_chroma_sync(created_pages)
 
             logger.success(f"✅ Successfully processed {topic}. Created/Updated {len(created_pages)} pages.")
+            return {"status": "success", "pages": created_pages, "hash": content_hash}
 
         except Exception as e:
-            logger.exception(f"Failed to process ingest task: {payload.get('topic')}")
+            logger.exception(f"Failed to process ingest task: {topic}")
+            return {"status": "failed", "phase": "unknown", "error": str(e), "topic": topic}
 
     # ── 候选上下文构建 ────────────────────────────────────
 
