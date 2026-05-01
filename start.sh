@@ -87,7 +87,7 @@ do_start() {
     _log "🔍 服务日志:      $LOG_DIR/uvicorn.log"
     echo ""
     _log "💡 使用方法:"
-    _log "   投递文档:  将 PDF 放入 incoming/ 后运行  uv run python scripts/ai_organizer.py"
+    _log "   投递文档:  将 PDF 放入 incoming/ 后运行  uv run python scripts/ingest_documents.py"
     _log "   查看日志:  ./start.sh logs"
     _log "   查看状态:  ./start.sh status"
     _log "   停止服务:  ./start.sh stop"

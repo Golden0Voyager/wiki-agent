@@ -8,6 +8,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .DS_Store
+**/.DS_Store
 .venv/
 env/
 venv/
@@ -23,6 +24,16 @@ chroma_db/
 .gemini/
 .claude/
 .pdca-status.json
+
+# 运行时状态 & 缓存
+.openrouter_models.json
+.nvidia_usage.json
+processed_hashes.json
+.pids/
+logs/
+
+# 运行时生成的 raw 数据（保留目录，忽略内容）
+raw/*.json
 
 # 系统垃圾
 .DS_Store
