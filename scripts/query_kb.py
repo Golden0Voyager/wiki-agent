@@ -11,33 +11,70 @@ sys.path.insert(0, PROJECT_ROOT)
 from scripts.sync_vector_db import search_documents, DB_PATH
 
 
+# ── UI 调色板（v2 极简风：青色品牌 + 软边框） ─────────────────────
+B  = "\033[1m"
+D  = "\033[2m"
+C  = "\033[36m"
+DC = "\033[2;36m"
+BC = "\033[1;36m"
+G  = "\033[32m"
+R  = "\033[31m"
+NC = "\033[0m"
+
+_BOX_W = 58
+_BAR = "─" * (_BOX_W - 2)
+
+
+def _panel_open(title: str) -> None:
+    inner = _BOX_W - 2 - 1 - len(title) - 1 - 1
+    print(f"{DC}╭─{NC} {BC}{title}{NC} {DC}{'─' * inner}╮{NC}")
+
+
+def _panel_close() -> None:
+    print(f"{DC}╰{_BAR}╯{NC}")
+
+
 def main():
     if len(sys.argv) > 1:
         query = " ".join(sys.argv[1:])
         k = 5
     else:
-        print("💡 提示: 也可以使用命令行参数: uv run python scripts/query_kb.py '量子计算' 5")
-        query = input("请输入搜索关键词或问题: ").strip()
+        print(f"\n  {D}用法: uv run python scripts/query_kb.py '量子计算'{NC}\n")
+        try:
+            query = input(f"{BC}›{NC} ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
         k = 5
 
     if not query:
-        print("❌ 搜索词不能为空")
+        print(f"  {R}✗{NC} {D}搜索词不能为空{NC}")
         return
 
-    print(f"\n🔍 正在搜索: '{query}' ...\n")
     results = search_documents(query, k=k)
 
+    print()
     if not results:
-        print("❌ 未找到相关结果")
+        _panel_open("search")
+        print(f"{DC}│{NC}  {B}{query}{NC}     {D}no results{NC}")
+        _panel_close()
+        print()
         return
 
-    print(f"✅ 找到 {len(results)} 个相关片段:\n")
+    _panel_open("search")
+    print(f"{DC}│{NC}  {B}{query}{NC}     {C}{len(results)} results{NC}")
+    _panel_close()
+    print()
+
     for i, (content, metadata, score) in enumerate(results, 1):
         source = metadata.get("source", "未知来源")
-        print(f"--- 结果 #{i} (距离: {score:.4f}) ---")
-        print(f"📄 来源: {source}")
-        print(f"📝 内容预览:")
-        print(content[:300] + "..." if len(content) > 300 else content)
+        # 内容片段：单行显示前 80 字（避免占据屏幕），dim 灰处理
+        snippet = content.strip().replace("\n", " ")
+        if len(snippet) > 80:
+            snippet = snippet[:80] + "…"
+
+        print(f"  {BC}{i}{NC}  {B}{score:.2f}{NC}   {C}{source}{NC}")
+        print(f"         {D}{snippet}{NC}")
         print()
 
 
