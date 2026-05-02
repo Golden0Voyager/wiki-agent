@@ -2,6 +2,20 @@
 
 ## Entities
 <!-- LLM-MANAGED SECTION START: entities -->
+- [[Zapier]]
+- [[Augment Code]]
+- [[CRED]]
+- [[TELUS]]
+- [[Rakuten]]
+- [[Fountain]]
+- [[SWE-bench]]
+- [[Grok 4]]
+- [[Gemini]]
+- [[台积电]]
+- [[韩国]]
+- [[欧盟]]
+- [[中国]]
+- [[美国]]
 - [[网易]]
 - [[绝悟]]
 - [[腾讯]]
@@ -14,6 +28,19 @@
 
 ## Concepts
 <!-- LLM-MANAGED SECTION START: concepts -->
+- [[安全架构嵌入]]
+- [[代理编码能力]]
+- [[AI自动化审查]]
+- [[人机编排]]
+- [[多代理协调]]
+- [[编程代理]]
+- [[AI治理框架]]
+- [[AI基础设施]]
+- [[负责任AI]]
+- [[负责任AI建设]]
+- [[发展-适配鸿沟]]
+- [[AI普及速度]]
+- [[AI主权]]
 - [[世界模型]]
 - [[UGC商业模式]]
 - [[生成式AI]]
