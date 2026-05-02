@@ -5,7 +5,7 @@ import re
 import asyncio
 import time
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from pathlib import Path
 from loguru import logger
 import httpx
@@ -533,12 +533,15 @@ class WikiService:
         user_content: str,
         max_retries: int = 3,
         providers: List[ProviderConfig] | None = None,
+        response_validator: Callable[[str], None] | None = None,
     ) -> str:
         """
         核心 LLM 调用方法。遍历 Provider 优先级链，集成 Circuit Breaker 熔断感知。
 
         Args:
             providers: 可选的自定义 Provider 链。为 None 时使用默认的 self.providers。
+            response_validator: 可选响应校验回调。若校验抛异常，视作可重试错误，
+                自动触发同 provider 重试 / fallback 到下一 provider，避免 200 + 残缺响应静默失败。
         """
         target_providers = providers or self.providers
         if not target_providers:
@@ -568,6 +571,7 @@ class WikiService:
                         headers={"Authorization": f"Bearer {provider.current_key}"},
                         json={
                             "model": provider.model,
+                            "max_tokens": 4096,
                             "messages": [
                                 {"role": "system", "content": system_prompt},
                                 {"role": "user", "content": user_content}
@@ -595,9 +599,27 @@ class WikiService:
                         logger.error(f"[{provider.name}] API Error {resp.status_code}: {resp.text[:200]}")
                         resp.raise_for_status()
 
-                    # ✅ 成功 → 重置熔断器
-                    provider.mark_success()
+                    # ✅ HTTP 200 → 拿到 raw content
                     content = resp.json()["choices"][0]["message"]["content"]
+
+                    # 可选响应校验：若校验失败（如 JSON 不可解析），视作可重试错误
+                    # 不消耗 provider 健康度（mark_success 推迟到校验通过之后）
+                    if response_validator is not None:
+                        try:
+                            response_validator(content)
+                        except Exception as ve:
+                            last_error = ve
+                            logger.warning(
+                                f"[{provider.name}] Response validator rejected output "
+                                f"(attempt {attempt+1}/{max_retries}): {ve}"
+                            )
+                            if attempt < max_retries - 1:
+                                provider.rotate_key()
+                                await asyncio.sleep(1)
+                            continue  # 进入同 provider 下一次重试，或耗尽后切下一 provider
+
+                    # ✅ 校验通过 → 重置熔断器
+                    provider.mark_success()
 
                     # NVIDIA 专属: 记录请求数
                     if provider.name.startswith("NVIDIA-"):
@@ -628,9 +650,17 @@ class WikiService:
         max_retries: int = 3,
         providers: List[ProviderConfig] | None = None
     ) -> Dict[str, Any]:
-        """调用 LLM 并解析 JSON 响应"""
+        """调用 LLM 并解析 JSON 响应。
+
+        把 _extract_json 作为 response_validator 注入 _call_llm_core：解析失败时
+        会被 core 的内层循环作为可重试错误处理，自动重试 / 切 provider，避免
+        '200 + 残缺 JSON' 静默失败。"""
         try:
-            raw_text = await self._call_llm_core(system_prompt, user_content, max_retries, providers=providers)
+            raw_text = await self._call_llm_core(
+                system_prompt, user_content, max_retries,
+                providers=providers,
+                response_validator=lambda t: self._extract_json(t),
+            )
             logger.info(f"LLM JSON response snippet: {raw_text[:200]}")
             return self._extract_json(raw_text)
         except Exception as e:
@@ -654,7 +684,10 @@ class WikiService:
     # ── JSON 解析鲁棒化 ──────────────────────────────────
 
     def _extract_json(self, raw_text: str) -> Dict[str, Any]:
-        """多策略提取 JSON，处理大模型各种包裹格式"""
+        """多策略提取 JSON，处理大模型各种包裹格式。
+
+        三种策略均失败时抛 ValueError，以便 _call_llm_core 内部循环将其视作可重试错误，
+        自动触发 provider 链 fallback（避免 NVIDIA-Qwen3 截断时整个任务直接失败）。"""
         # 策略1: 直接解析
         try:
             return json.loads(raw_text.strip())
@@ -677,8 +710,7 @@ class WikiService:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        logger.error(f"Cannot parse JSON from response: {raw_text[:300]}")
-        return {"error": "JSON parse failed", "entities": [], "concepts": []}
+        raise ValueError(f"Cannot parse JSON from response: {raw_text[:300]}")
 
     # ── Markdown 生成处理 ─────────────────────────────────
 
