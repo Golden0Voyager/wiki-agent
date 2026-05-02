@@ -21,6 +21,7 @@ class IngestPayload(BaseModel):
     topic: str
     content: str
     metadata: Dict[str, Any] = {}
+    force: bool = False  # 绕过 content_hash 去重，恢复脚本/手工重投时使用
 
 # 并发 Worker 数量 (LLM 调用是纯 I/O 等待，多 Worker 可大幅提升吞吐量)
 WORKER_COUNT = 3
