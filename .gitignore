@@ -40,3 +40,6 @@ wiki/.obsidian/
 
 # 系统垃圾
 .DS_Store
+# Skill-generated analysis artifacts
+.understand-anything/
+.codegraph/
