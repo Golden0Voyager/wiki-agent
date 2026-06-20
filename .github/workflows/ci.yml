@@ -24,10 +24,10 @@ jobs:
         run: uv sync --dev
 
       - name: Run ruff check
-        run: uv run ruff check config.py wiki_service.py tests/
+        run: uv run ruff check api.py config.py wiki_service.py schema/ scripts/
 
       - name: Run mypy
-        run: uv run mypy config.py wiki_service.py || true
+        run: uv run mypy api.py config.py wiki_service.py || true
 
       - name: Run tests with coverage
         run: uv run pytest --cov --cov-report=term-missing tests/
