@@ -1,13 +1,15 @@
-import os
-import httpx
 import asyncio
+import os
+
+import httpx
+
 
 async def main():
     api_key = os.getenv("SILICONFLOW_API_KEY")
     if not api_key:
         print("No SILICONFLOW_API_KEY")
         return
-        
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://api.siliconflow.cn/v1/chat/completions",

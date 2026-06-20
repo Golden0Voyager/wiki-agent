@@ -1,7 +1,7 @@
+import json
 import os
 import sys
 import time
-import json
 import warnings
 from pathlib import Path
 
@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.sync_vector_db import search_documents
-
 
 # ── ModelScope 模型池（自动轮换）─────────────────────────────────
 _MODELSCOPE_MODELS = [
@@ -113,7 +112,7 @@ def fetch_openrouter_rag_models(force=False):
 
     if not force and not _should_refresh_or_cache():
         try:
-            with open(_OR_CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(_OR_CACHE_FILE, encoding="utf-8") as f:
                 data = json.load(f)
                 _or_models = data.get("models", [])
                 return _or_models
@@ -223,9 +222,6 @@ def main():
 
         # 3. 调用 LLM（ModelScope 优先 → OpenRouter 降级）
         answer = None
-        used_provider = None
-        used_model = None
-        used_dt = 0.0
 
         # 3a. ModelScope 池
         ms_key = _get_api_key("MODELSCOPE_API_KEY")
@@ -241,7 +237,6 @@ def main():
                 answer = _call_llm(client, model, system_prompt, user_prompt)
                 dt = time.time() - t1
                 if answer:
-                    used_provider, used_model, used_dt = "modelscope", short, dt
                     print(f"  {D}modelscope{NC}    {short:<24} {dt:>4.1f}s  {G}✓{NC}")
                     break
                 else:
@@ -264,7 +259,6 @@ def main():
                     answer = _call_llm(client, mid, system_prompt, user_prompt)
                     dt = time.time() - t1
                     if answer:
-                        used_provider, used_model, used_dt = "openrouter", short, dt
                         print(f"  {D}openrouter{NC}    {short:<24} {dt:>4.1f}s  {G}✓{NC}")
                         break
                     else:

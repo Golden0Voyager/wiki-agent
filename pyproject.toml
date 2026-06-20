@@ -65,5 +65,12 @@ line-length = 120
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["E402", "W293", "SIM105", "SIM108", "B007"]
+"api.py" = ["E402"]
+
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.bandit]
+skips = ["B101", "B311", "B404", "B603"]

@@ -5,12 +5,11 @@ WikiAgent Directory Watcher — 自动监控 incoming/ 目录
 环境变量:
     WATCHER_INTERVAL=30   # 轮询间隔（秒），默认 30 秒
 """
+import asyncio
 import os
 import sys
-import time
-import asyncio
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INCOMING_DIR = PROJECT_ROOT / "incoming"
@@ -45,7 +44,7 @@ async def run_ingest():
 
 async def main():
     sys.stdout.reconfigure(line_buffering=True)
-    print(f"👁️  WikiAgent Watcher 启动")
+    print("👁️  WikiAgent Watcher 启动")
     print(f"   监控目录: {INCOMING_DIR}")
     print(f"   轮询间隔: {WATCHER_INTERVAL} 秒")
     print(f"   支持格式: {', '.join(sorted(SUPPORTED_EXTENSIONS))}")

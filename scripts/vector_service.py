@@ -6,11 +6,9 @@ Vector Service — 常驻向量检索服务
 Usage:
     uv run python scripts/vector_service.py
 """
-import os
 import json
-import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import List, Tuple
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 KB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(KB_ROOT, "chroma_db")
@@ -26,8 +24,8 @@ def _load_model():
         return
 
     import torch
-    from langchain_huggingface import HuggingFaceEmbeddings
     from langchain_chroma import Chroma
+    from langchain_huggingface import HuggingFaceEmbeddings
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"🚀 加载嵌入模型 {EMBEDDING_MODEL} 到 {device.upper()} ...")

@@ -1,8 +1,7 @@
 import os
-import asyncio
-from loguru import logger
-from typing import List, Tuple
 from pathlib import Path
+
+from loguru import logger
 
 KB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(KB_ROOT, "chroma_db")
@@ -35,17 +34,17 @@ def _make_chunk_id(source: str, chunk_index: int) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-async def upsert_markdowns(file_paths: List[str]):
+async def upsert_markdowns(file_paths: list[str]):
     """将给定的 markdown 文件异步解析并存入 ChromaDB (幂等: 同一文件重复写入不会产生重复向量)"""
     if not file_paths:
         return
 
     try:
+        import asyncio
+
+        from langchain_chroma import Chroma
         from langchain_community.document_loaders import TextLoader
         from langchain_text_splitters import RecursiveCharacterTextSplitter
-        from langchain_chroma import Chroma
-
-        import asyncio
         loop = asyncio.get_running_loop()
 
         def _process():
@@ -97,11 +96,11 @@ async def upsert_markdowns(file_paths: List[str]):
 
         await loop.run_in_executor(None, _process)
 
-    except Exception as e:
+    except Exception:
         logger.exception(f"Error during ChromaDB upsert for {file_paths}")
 
 
-def search_documents(query: str, k: int = 5) -> List[Tuple[str, dict, float]]:
+def search_documents(query: str, k: int = 5) -> list[tuple[str, dict, float]]:
     """
     统一向量检索接口。
     优先尝试常驻向量服务 (HTTP)，失败则回退到本地加载模型。

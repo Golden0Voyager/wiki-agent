@@ -1,5 +1,6 @@
 import asyncio
 import os
+
 import httpx
 from dotenv import load_dotenv
 
@@ -9,7 +10,7 @@ async def main():
     api_key = os.getenv("HUNYUAN_API_KEY")
     api_base = os.getenv("HUNYUAN_BASE_URL", "https://api.hunyuan.cloud.tencent.com/v1")
     model = "hunyuan-pro"
-    
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{api_base}/chat/completions",

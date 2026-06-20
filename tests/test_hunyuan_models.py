@@ -1,5 +1,6 @@
 import asyncio
 import os
+
 import httpx
 from dotenv import load_dotenv
 
@@ -8,7 +9,7 @@ load_dotenv()
 async def main():
     api_key = os.getenv("HUNYUAN_API_KEY")
     api_base = os.getenv("HUNYUAN_BASE_URL", "https://api.hunyuan.cloud.tencent.com/v1")
-    
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{api_base}/models",

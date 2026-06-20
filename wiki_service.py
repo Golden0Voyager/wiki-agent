@@ -1,14 +1,16 @@
-import os
-import json
-import hashlib
-import re
 import asyncio
+import hashlib
+import json
+import os
+import re
 import time
+from collections.abc import Callable
 from datetime import datetime
-from typing import List, Dict, Any, Callable
 from pathlib import Path
-from loguru import logger
+from typing import Any
+
 import httpx
+from loguru import logger
 
 from config import settings
 
@@ -26,7 +28,7 @@ class NvidiaRateLimiter:
 
     单例模式，进程内共享令牌桶和请求计数。
     持久化到 .nvidia_usage.json，重启后数据不丢失。
-    
+
     注意: NVIDIA 免费 tier 实际限制为:
       - 速率: 40 RPM (burst ~10 RPM sustained)
       - 月度: ~1,000 requests/month (按请求数计，非 credits)
@@ -145,7 +147,7 @@ class NvidiaRateLimiter:
 
 class ProviderConfig:
     """单个 LLM Provider 的配置，内置三态熔断器 (CLOSED → OPEN → HALF-OPEN)"""
-    def __init__(self, name: str, api_base: str, model: str, api_keys: List[str]):
+    def __init__(self, name: str, api_base: str, model: str, api_keys: list[str]):
         self.name = name
         self.api_base = api_base
         self.model = model
@@ -184,7 +186,7 @@ class ProviderConfig:
         self._last_fail_time = time.monotonic()
 
 
-def _build_nvidia_extract_pool() -> List[ProviderConfig]:
+def _build_nvidia_extract_pool() -> list[ProviderConfig]:
     """构建 NVIDIA 内部多模型 Extract 池（按 JSON 稳定性 + 速度排序）"""
     keys = settings.parse_keys(settings.nvidia_api_key) or settings.parse_keys(os.getenv("NVIDAI_API_KEY"))
     if not keys:
@@ -211,7 +213,7 @@ def _build_nvidia_extract_pool() -> List[ProviderConfig]:
     return pool
 
 
-def _build_extract_chain() -> List[ProviderConfig]:
+def _build_extract_chain() -> list[ProviderConfig]:
     """构建【极速提取链】: NVIDIA Pool → Groq → ModelScope → AIHubMix → OpenRouter → ZhipuAI → Tencent"""
     chain = []
 
@@ -260,15 +262,15 @@ def _build_extract_chain() -> List[ProviderConfig]:
     return chain
 
 
-def _build_generate_chain() -> List[ProviderConfig]:
+def _build_generate_chain() -> list[ProviderConfig]:
     """构建【语义增强链】: Tencent-TokenHub → AIHubMix → OpenRouter → ZhipuAI → Tencent-Hunyuan"""
     chain = []
-    
+
     # L0: Tencent TokenHub (hy3-preview: 100万免费token，主力生成)
     keys = settings.parse_keys(settings.tokenhub_api_key)
     if keys:
         chain.append(ProviderConfig("Tencent-TokenHub", settings.tokenhub_base_url, "hy3-preview", keys))
-        
+
     # L1: AIHubMix (k2.6-code-preview-free: 综合实力最强，hy3-preview 的 fallback)
     # 次选: coding-minimax-m2.7-free (2.7版本大模型，实力强)
     # 降级: coding-glm-5.1-free
@@ -278,28 +280,28 @@ def _build_generate_chain() -> List[ProviderConfig]:
         chain.append(ProviderConfig("AIHubMix-Kimi", "https://aihubmix.com/v1", "k2.6-code-preview-free", keys))
         chain.append(ProviderConfig("AIHubMix-MiniMax", "https://aihubmix.com/v1", "coding-minimax-m2.7-free", keys))
         chain.append(ProviderConfig("AIHubMix-GLM5", "https://aihubmix.com/v1", "coding-glm-5.1-free", keys))
-        
+
     # L2: OpenRouter (GLM 4.5 Air Free)
     keys = settings.parse_keys(settings.openrouter_api_key)
     if keys:
         chain.append(ProviderConfig("OpenRouter", "https://openrouter.ai/api/v1", "z-ai/glm-4.5-air:free", keys))
-        
+
     # L3: ZhipuAI 主账号 (GLM 4.7 Flash)
     keys = settings.parse_keys(settings.zhipuai_api_key)
     if keys:
         chain.append(ProviderConfig("ZhipuAI", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
-    
+
     # L3b: ZhipuAI 备用账号 (GLM 4.7 Flash)
     keys = settings.parse_keys(settings.zhipuai_api_key_backup)
     if keys:
         chain.append(ProviderConfig("ZhipuAI-Backup", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash", keys))
-    
+
     # L4: Tencent (Hunyuan Lite)
     keys = settings.parse_keys(settings.hunyuan_api_key) or settings.parse_keys(settings.ai_api_key)
     if keys:
         base = settings.hunyuan_base_url or settings.ai_api_base or "https://api.hunyuan.cloud.tencent.com/v1"
         chain.append(ProviderConfig("Tencent", base, "hunyuan-lite", keys))
-        
+
     return chain
 
 
@@ -324,10 +326,10 @@ class WikiService:
         # 构建双路径 Provider 优先级链
         self.extract_providers = _build_extract_chain()
         self.generate_providers = _build_generate_chain()
-        
+
         # 兼容旧代码，将 extract 作为默认 providers
         self.providers = self.extract_providers
-        
+
         if not self.extract_providers or not self.generate_providers:
             logger.error("⚠️ 未检测到完整的 API Key 配置！请检查 .zshenv.secrets")
         else:
@@ -381,7 +383,7 @@ class WikiService:
     def _is_duplicate(self, content_hash: str, force: bool = False) -> bool:
         return content_hash in self._processed_hashes and not force
 
-    async def _persist_raw(self, payload: Dict[str, Any], content_hash: str) -> Path:
+    async def _persist_raw(self, payload: dict[str, Any], content_hash: str) -> Path:
         """Step 2: 持久化原始 payload 到 raw/ 目录"""
         now = datetime.now()
         source_project = payload["source_project"]
@@ -401,7 +403,7 @@ class WikiService:
                 json.dump(raw_payload, f, ensure_ascii=False, indent=2)
         return raw_path
 
-    async def _run_analyze_phase(self, content: str, source_project: str, topic: str) -> Dict[str, Any]:
+    async def _run_analyze_phase(self, content: str, source_project: str, topic: str) -> dict[str, Any]:
         """Step 3: Analyze Phase — 实体与概念提取 (极速提取链)"""
         purpose = self._read_file(self.schema_dir / "purpose.md")
         analysis_prompt_tmpl = self._read_file(self.schema_dir / "analyze_prompt.md")
@@ -411,7 +413,7 @@ class WikiService:
 
     async def _run_generate_phase(
         self,
-        analysis_results: Dict[str, Any],
+        analysis_results: dict[str, Any],
         content: str,
         content_hash: str,
         source_project: str
@@ -436,7 +438,7 @@ class WikiService:
 
     async def _commit_results(
         self,
-        analysis_results: Dict[str, Any],
+        analysis_results: dict[str, Any],
         source_project: str,
         topic: str,
         content_hash: str
@@ -451,7 +453,7 @@ class WikiService:
 
     # ── 主流程编排器 ────────────────────────────────────────
 
-    async def process_ingest_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_ingest_task(self, payload: dict[str, Any]) -> dict[str, Any]:
         """
         异步处理单条摄入任务 (由 Queue Worker 调用)。
         将完整流水线拆分为 7 个可独立监控的步骤。
@@ -500,7 +502,7 @@ class WikiService:
 
     # ── 候选上下文构建 ────────────────────────────────────
 
-    def _build_candidate_context(self, analysis: Dict[str, Any]) -> str:
+    def _build_candidate_context(self, analysis: dict[str, Any]) -> str:
         """根据提取的实体，在本地查找已有的 Markdown 内容作为候选上下文"""
         candidates = []
         entities_to_check = [e["name"] for e in analysis.get("entities", [])]
@@ -532,7 +534,7 @@ class WikiService:
         system_prompt: str,
         user_content: str,
         max_retries: int = 3,
-        providers: List[ProviderConfig] | None = None,
+        providers: list[ProviderConfig] | None = None,
         response_validator: Callable[[str], None] | None = None,
     ) -> str:
         """
@@ -648,8 +650,8 @@ class WikiService:
         system_prompt: str,
         user_content: str,
         max_retries: int = 3,
-        providers: List[ProviderConfig] | None = None
-    ) -> Dict[str, Any]:
+        providers: list[ProviderConfig] | None = None
+    ) -> dict[str, Any]:
         """调用 LLM 并解析 JSON 响应。
 
         把 _extract_json 作为 response_validator 注入 _call_llm_core：解析失败时
@@ -672,7 +674,7 @@ class WikiService:
         system_prompt: str,
         user_content: str,
         max_retries: int = 3,
-        providers: List[ProviderConfig] | None = None
+        providers: list[ProviderConfig] | None = None
     ) -> str:
         """调用 LLM 并返回纯文本响应"""
         try:
@@ -683,7 +685,7 @@ class WikiService:
 
     # ── JSON 解析鲁棒化 ──────────────────────────────────
 
-    def _extract_json(self, raw_text: str) -> Dict[str, Any]:
+    def _extract_json(self, raw_text: str) -> dict[str, Any]:
         """多策略提取 JSON，处理大模型各种包裹格式。
 
         三种策略均失败时抛 ValueError，以便 _call_llm_core 内部循环将其视作可重试错误，
@@ -714,7 +716,7 @@ class WikiService:
 
     # ── Markdown 生成处理 ─────────────────────────────────
 
-    def _process_generated_markdown(self, raw_md: str) -> List[str]:
+    def _process_generated_markdown(self, raw_md: str) -> list[str]:
         pages = []
         chunks = re.split(r'--- FILE: (.*?) ---', raw_md)
         if len(chunks) > 1:
@@ -741,7 +743,7 @@ class WikiService:
 
     # ── Index 管理 ────────────────────────────────────────
 
-    def _update_and_sanitize_index(self, analysis: Dict[str, Any]):
+    def _update_and_sanitize_index(self, analysis: dict[str, Any]):
         """更新 index.md 并立即清洗悬空链接 (合并为单次读写，避免两次磁盘 I/O)"""
         index_path = self.wiki_dir / "index.md"
         content = self._read_file(index_path)
@@ -804,7 +806,7 @@ class WikiService:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"\n{entry} (Time: {datetime.now().strftime('%H:%M:%S')})")
 
-    async def _trigger_chroma_sync(self, file_paths: List[str]):
+    async def _trigger_chroma_sync(self, file_paths: list[str]):
         """调用 sync_vector_db 模块同步文件到 ChromaDB"""
         try:
             from scripts.sync_vector_db import upsert_markdowns

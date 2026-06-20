@@ -1,6 +1,7 @@
 import asyncio
-from wiki_service import WikiService
 import logging
+
+from wiki_service import WikiService
 
 logging.basicConfig(level=logging.INFO)
 

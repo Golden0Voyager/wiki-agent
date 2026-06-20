@@ -1,27 +1,25 @@
-import os
+import base64
 import json
+import os
 import re
-import time
+import shutil
 import sys
+import time
+from typing import Any
+from urllib.parse import quote
+
+import docx  # python-docx
+import fitz  # PyMuPDF
 import httpx
 from openai import OpenAI
-import fitz  # PyMuPDF
-import docx  # python-docx
-import base64
-import shutil
-from typing import List, Dict, Any
-from urllib.parse import quote
-from tenacity import retry, wait_exponential, stop_after_attempt
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # ── 导入 WikiService 的 Provider 链（用于消除单点故障） ─────────────────
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 try:
-    from wiki_service import (
-        ProviderConfig, _build_generate_chain,
-        NON_RETRYABLE_STATUS
-    )
+    from wiki_service import NON_RETRYABLE_STATUS, ProviderConfig, _build_generate_chain
     WIKI_SERVICE_AVAILABLE = True
 except ImportError as _e:
     print(f"⚠️ 无法导入 wiki_service Provider 链: {_e}")
@@ -51,9 +49,9 @@ def extract_chart_insight(base64_image: str) -> str:
     sf_key = os.getenv("SILICONFLOW_API_KEY")
     if not sf_key:
         return ""
-    
+
     prompt = "请提取并描述这张图表或图片中的核心数据和洞察。请使用Markdown格式。如果是无意义的插图（如背景、公司Logo、纯装饰），请回复'无关键信息'。"
-    
+
     # 因为 OCR 耗时较长，增加超时时间
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(
@@ -83,7 +81,7 @@ def safe_extract_chart_insight(base64_image: str) -> str:
 
 # ── 同步版 JSON 解析与 LLM 调用（复用 wiki_service 的 Provider 链） ─────────
 
-def _extract_json_sync(raw_text: str) -> Dict[str, Any]:
+def _extract_json_sync(raw_text: str) -> dict[str, Any]:
     """多策略提取 JSON，处理大模型各种包裹格式"""
     try:
         return json.loads(raw_text.strip())
@@ -111,8 +109,8 @@ def _call_llm_json_sync(
     system_prompt: str,
     user_content: str,
     max_retries: int = 3,
-    providers: List[ProviderConfig] = None,
-) -> Dict[str, Any]:
+    providers: list[ProviderConfig] = None,
+) -> dict[str, Any]:
     """
     同步版 LLM 调用，遍历 Provider 优先级链，集成 Circuit Breaker。
     供 ai_organizer.py 在文档分析阶段使用。
@@ -189,7 +187,7 @@ def extract_text_from_pdf(filepath):
         doc = fitz.open(filepath)
         for page_num, page in enumerate(doc):
             page_text = []
-            
+
             # 1. 提取原生表格 (PyMuPDF find_tables)
             tables = page.find_tables()
             if tables:
@@ -200,7 +198,7 @@ def extract_text_from_pdf(filepath):
                             page_text.append("[原生表格数据]:\n" + md_table)
                     except Exception:
                         pass
-                        
+
             # 2. 提取文本块
             blocks = page.get_text("blocks")
             for b in blocks:
@@ -208,7 +206,7 @@ def extract_text_from_pdf(filepath):
                     content = b[4].strip()
                     if content and not content.isdigit():
                         page_text.append(content)
-            
+
             # 3. 处理图片 (交由 DeepSeek-OCR)
             images = page.get_images(full=True)
             for img_index, img in enumerate(images):
@@ -218,28 +216,28 @@ def extract_text_from_pdf(filepath):
                     # 如果不是RGB或灰度图，先转换
                     if pix.n - pix.alpha > 3:
                         pix = fitz.Pixmap(fitz.csRGB, pix)
-                    
+
                     # 过滤掉过小的图标或Logo (小于 100x100)
                     if pix.width < 100 or pix.height < 100:
                         continue
-                        
+
                     img_bytes = pix.tobytes("jpeg")
                     b64_img = base64.b64encode(img_bytes).decode('utf-8')
-                    
+
                     print(f"  🔍 发现图表 (页码 {page_num+1})，正在交由 DeepSeek-OCR 分析...")
                     insight = safe_extract_chart_insight(b64_img)
                     if insight:
                         page_text.append(f"[图表/图片解析]:\n{insight}")
                 except Exception as e:
                     print(f"  ⚠️ 图表 OCR 失败: {e}")
-                    
+
             if page_text:
                 text_parts.append("\n\n".join(page_text))
         doc.close()
     except Exception as e:
         print(f"❌ 读取PDF失败 {filepath}: {e}")
         return None
-    
+
     # 组合全篇并截断防止超载
     return "\n\n---\n\n".join(text_parts)[:100000]
 
@@ -258,7 +256,7 @@ def extract_text_from_docx(filepath):
 
 def extract_text_from_md(filepath):
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             return f.read()[:100000]
     except Exception as e:
         print(f"❌ 读取MD失败 {filepath}: {e}")
@@ -268,7 +266,7 @@ def extract_text_from_image(filepath):
     try:
         with open(filepath, 'rb') as f:
             b64_img = base64.b64encode(f.read()).decode('utf-8')
-        print(f"  🔍 发现单独图片文件，正在交由 DeepSeek-OCR 分析...")
+        print("  🔍 发现单独图片文件，正在交由 DeepSeek-OCR 分析...")
         insight = safe_extract_chart_insight(b64_img)
         if insight:
             return f"[图片原生解析]:\n{insight}"
@@ -415,27 +413,27 @@ def update_index_file(entry):
     score = entry.get('score', 'N/A')
     reason = entry.get('score_reason', '暂无理由')
     summary = entry.get('summary', '暂无摘要')
-    
+
     # 格式化摘要
     summary = summary.replace("【", "**【").replace("】", "】**")
-    
+
     # 链接使用相对路径指向 archive 文件夹
     link = quote(f"archive/{entry['filename']}")
-    
+
     # 构建卡片式内容
     lines = [
         f"### [{score}] [{entry['title']}]({link})",
-        f"",
+        "",
         f"> **机构**: {entry['institution']} | **年份**: {entry['year']} | **标签**: {tags_str}",
-        f">",
+        ">",
         f"> **评分理由**: _{reason}_",
-        f"",
+        "",
         f"{summary}",
-        f"",
-        f"---",
-        f""
+        "",
+        "---",
+        ""
     ]
-    
+
     with open(INDEX_FILE, "a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -443,33 +441,33 @@ def process_directory():
     doc_files = []
     # 扫描所有支持的格式
     valid_extensions = ('.pdf', '.docx', '.md', '.jpg', '.jpeg', '.png', '.pptx', '.xlsx')
-    
+
     # 只扫描 INCOMING_DIR
     for root, dirs, files in os.walk(INCOMING_DIR):
         for file in files:
             if file.lower().endswith(valid_extensions):
                 doc_files.append(os.path.join(root, file))
-    
+
     print(f"📂 在待处理区(incoming)发现 {len(doc_files)} 个文档...")
-    
+
     # 读取现有的 README 内容，用于去重
     existing_content = ""
     if os.path.exists(INDEX_FILE):
-        with open(INDEX_FILE, "r", encoding="utf-8") as f:
+        with open(INDEX_FILE, encoding="utf-8") as f:
             existing_content = f.read()
 
     for filepath in doc_files:
         filename = os.path.basename(filepath)
-        
+
         # --- 智能增量更新逻辑 ---
         encoded_filename = quote(filename)
         if encoded_filename in existing_content:
             # 只有当文件确实在 README 中时才跳过
             print(f"⏭️  已索引，跳过: {filename}")
             continue
-            
+
         print(f"\nProcessing New File: {filename} ...")
-        
+
         # 统一的文本提取接口
         text = extract_text(filepath)
         if not text:
@@ -484,11 +482,11 @@ def process_directory():
         if not meta:
             print(f"⏭️  分析返回空结果，跳过: {filename}")
             continue
-            
+
         tags_slug = "_".join(meta['tags'][:2])
         safe_title = re.sub(r'[\\/*?:"<>|]', "", meta['title'])
         safe_inst = re.sub(r'[\\/*?:"<>|]', "", meta['institution'])
-        
+
         # 年份保底逻辑
         year = str(meta.get('year', '2025')).strip()
         year_match = re.search(r'\d{4}', year)
@@ -496,16 +494,16 @@ def process_directory():
             year = year_match.group(0)
         else:
             year = '2025'
-        
+
         # 获取原始扩展名
         _, ext = os.path.splitext(filename)
-        
+
         new_filename = f"[{tags_slug}]_{year}_{safe_inst}_{safe_title}{ext}"
         new_filename = new_filename.replace(" ", "_")
-        
+
         # 目标归档路径
         new_filepath = os.path.join(ARCHIVE_DIR, new_filename)
-        
+
         # 移动并重命名文件
         try:
             shutil.move(filepath, new_filepath)
@@ -529,7 +527,7 @@ def process_directory():
                 "original_file": meta['filename']
             }
         }
-        
+
         try:
             httpx.post("http://127.0.0.1:8000/api/v1/wiki/ingest", json=wiki_payload, timeout=10)
             print(f"🚀 已成功将 {meta['title']} 的知识条目推送到 WikiAgent 队列！")

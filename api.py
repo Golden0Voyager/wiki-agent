@@ -1,12 +1,12 @@
 import asyncio
 import logging
+from typing import Any
+
 from fastapi import FastAPI
+from loguru import logger
 from pydantic import BaseModel
-from typing import Dict, Any
 
 from wiki_service import WikiService
-
-from loguru import logger
 
 # 关闭第三方库的刷屏日志
 for _name in ("httpx", "chromadb", "uvicorn.access", "watchfiles"):
@@ -20,7 +20,7 @@ class IngestPayload(BaseModel):
     source_project: str
     topic: str
     content: str
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
     force: bool = False  # 绕过 content_hash 去重，恢复脚本/手工重投时使用
 
 # 并发 Worker 数量 (LLM 调用是纯 I/O 等待，多 Worker 可大幅提升吞吐量)
@@ -39,13 +39,14 @@ async def queue_worker(worker_id: int):
         try:
             logger.info(f"[Worker-{worker_id}] Picked up: {payload['topic']}")
             await wiki_service.process_ingest_task(payload)
-        except Exception as e:
+        except Exception:
             logger.exception(f"[Worker-{worker_id}] Error processing task")
         finally:
             ingest_queue.task_done()
 
 # lifespan context manager for FastAPI
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

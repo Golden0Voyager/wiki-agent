@@ -8,8 +8,7 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from scripts.sync_vector_db import search_documents, DB_PATH
-
+from scripts.sync_vector_db import search_documents
 
 # ── UI 调色板（v2 极简风：青色品牌 + 软边框） ─────────────────────
 B  = "\033[1m"

@@ -1,8 +1,10 @@
 import os
 import re
-import httpx
 import time
 from urllib.parse import unquote
+
+import httpx
+
 
 def parse_readme_and_ingest():
     readme_path = os.path.join(os.path.dirname(__file__), "..", "README.md")
@@ -10,28 +12,28 @@ def parse_readme_and_ingest():
         print("❌ 找不到 README.md 文件！")
         return
 
-    with open(readme_path, "r", encoding="utf-8") as f:
+    with open(readme_path, encoding="utf-8") as f:
         content = f.read()
 
     # 按分割线切分出每个报告的独立块
     blocks = content.split("---")
-    
+
     success_count = 0
     # 跳过第一个块（通常是 README 的标题和前言）
     for block in blocks[1:]:
         block = block.strip()
         if not block:
             continue
-            
+
         # 1. 提取分数、标题和文件名
         match = re.search(r'### \[([0-9\.]+)\] \[(.*?)\]\((.*?)\)', block)
         if not match:
             continue
-            
+
         score = float(match.group(1))
         title = match.group(2)
         filename = unquote(match.group(3))
-        
+
         # 2. 提取元数据（机构、年份、标签）
         meta_match = re.search(r'> \*\*机构\*\*: (.*?) \| \*\*年份\*\*: (.*?) \| \*\*标签\*\*: (.*)', block)
         institution = "未知"
@@ -43,11 +45,11 @@ def parse_readme_and_ingest():
             tags_raw = meta_match.group(3)
             # 把类似 `量子计算` `产业政策` 拆分成数组
             tags = [t.strip('` ') for t in tags_raw.split() if t.strip('` ')]
-            
+
         # 3. 提取评分理由
         reason_match = re.search(r'> \*\*评分理由\*\*: _(.*?)_', block)
         reason = reason_match.group(1) if reason_match else ""
-        
+
         # 4. 提取核心摘要
         summary = ""
         lines = block.split('\n')
@@ -56,10 +58,10 @@ def parse_readme_and_ingest():
             if '> **评分理由**:' in line:
                 reason_idx = i
                 break
-                
+
         if reason_idx != -1:
             summary = "\n".join(lines[reason_idx+1:]).strip()
-            
+
         # 5. 拼装成与原先完全一致的 payload
         wiki_payload = {
             "source_project": "pdf_archive",
@@ -74,7 +76,7 @@ def parse_readme_and_ingest():
                 "original_file": filename
             }
         }
-        
+
         print(f"📥 正在批量导入: {title} ...")
         try:
             # 投递给常驻后端的 WikiAgent
@@ -83,7 +85,7 @@ def parse_readme_and_ingest():
             success_count += 1
         except Exception as e:
             print(f"  ❌ 投递失败 (请确保 uvicorn api:app 正在运行): {e}")
-            
+
         # 稍微停顿，防止瞬间发太多请求把 FastAPI 的队列塞爆
         time.sleep(0.5)
 

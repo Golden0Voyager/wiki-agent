@@ -11,8 +11,9 @@ README.md 写入成功但 wiki/ 卡片未生成、raw/ 也无对应 JSON。
 """
 import re
 import sys
-import httpx
 from pathlib import Path
+
+import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -59,7 +60,7 @@ payload = {
     },
 }
 
-print(f"📦 准备投递")
+print("📦 准备投递")
 print(f"   topic        {payload['topic']}")
 print(f"   score        {payload['metadata']['score']}")
 print(f"   tags         {tags}")

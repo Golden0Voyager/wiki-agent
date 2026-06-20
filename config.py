@@ -2,7 +2,7 @@
 WikiAgent 统一配置中心。
 所有环境变量、系统参数、Provider 配置集中在此管理，支持 .env 文件热加载与验证。
 """
-from typing import List, Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,23 +16,23 @@ class Settings(BaseSettings):
     )
 
     # ── LLM Provider API Keys（支持逗号分隔的多 Key） ─────────────
-    nvidia_api_key: Optional[str] = None
-    groq_api_key: Optional[str] = None
-    modelscope_api_key: Optional[str] = None
-    aihubmix_api_key: Optional[str] = None
-    openrouter_api_key: Optional[str] = None
-    zhipuai_api_key: Optional[str] = None
-    zhipuai_api_key_backup: Optional[str] = None
-    hunyuan_api_key: Optional[str] = None
-    tokenhub_api_key: Optional[str] = None    # 腾讯 TokenHub (hy3-preview)
-    ai_api_key: Optional[str] = None          # 兼容旧配置名
-    gemini_api_key: Optional[str] = None
-    siliconflow_api_key: Optional[str] = None
+    nvidia_api_key: str | None = None
+    groq_api_key: str | None = None
+    modelscope_api_key: str | None = None
+    aihubmix_api_key: str | None = None
+    openrouter_api_key: str | None = None
+    zhipuai_api_key: str | None = None
+    zhipuai_api_key_backup: str | None = None
+    hunyuan_api_key: str | None = None
+    tokenhub_api_key: str | None = None    # 腾讯 TokenHub (hy3-preview)
+    ai_api_key: str | None = None          # 兼容旧配置名
+    gemini_api_key: str | None = None
+    siliconflow_api_key: str | None = None
 
     # ── Provider Base URLs ────────────────────────────────────────
     hunyuan_base_url: str = "https://api.hunyuan.cloud.tencent.com/v1"
     tokenhub_base_url: str = "https://tokenhub.tencentmaas.com/v1"
-    ai_api_base: Optional[str] = None
+    ai_api_base: str | None = None
 
     # ── Circuit Breaker 参数 ─────────────────────────────────────
     cb_fail_threshold: int = 3
@@ -43,14 +43,14 @@ class Settings(BaseSettings):
     llm_timeout: float = 120.0
 
     # ── 系统路径 ─────────────────────────────────────────────────
-    wiki_base_dir: Optional[str] = None       # 默认使用当前工作目录
+    wiki_base_dir: str | None = None       # 默认使用当前工作目录
 
     # ── 功能开关 ─────────────────────────────────────────────────
     dedup_enabled: bool = True
     chroma_sync_enabled: bool = True
 
     # ── 工具方法 ─────────────────────────────────────────────────
-    def parse_keys(self, raw: Optional[str]) -> List[str]:
+    def parse_keys(self, raw: str | None) -> list[str]:
         """从逗号分隔的字符串中解析 API Key 列表"""
         if not raw:
             return []

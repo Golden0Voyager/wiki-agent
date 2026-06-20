@@ -4,8 +4,9 @@
 已处理的 hash 也会被过滤（读取 processed_hashes.json）。
 """
 import json
-import httpx
 from pathlib import Path
+
+import httpx
 
 PROJECT_DIR = Path(__file__).parent
 raw_dir = PROJECT_DIR / "raw"
@@ -22,7 +23,7 @@ if processed_path.exists():
 # 按 hash 去重：同一份文档只保留最新的那条记录
 seen_hashes = {}
 for file in sorted(raw_dir.glob("*.json")):
-    with open(file, "r") as f:
+    with open(file) as f:
         payload = json.load(f)
     content_hash = payload.get("hash", "")
     seen_hashes[content_hash] = (file, payload)
