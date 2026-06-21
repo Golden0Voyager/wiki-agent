@@ -43,3 +43,10 @@ wiki/.obsidian/
 # Skill-generated analysis artifacts
 .understand-anything/
 .codegraph/
+
+# Test coverage cache
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
