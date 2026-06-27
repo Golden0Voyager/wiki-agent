@@ -27,7 +27,7 @@ jobs:
         run: uv run ruff check api.py config.py wiki_service.py schema/ scripts/
 
       - name: Run mypy
-        run: uv run mypy api.py config.py wiki_service.py || true
+        run: uv run mypy
       - name: Run security scan (bandit)
         run: uv tool run bandit -r . || true
 
@@ -42,4 +42,4 @@ jobs:
           echo "Tests passed (skipped)"
 
       - name: Enforce coverage threshold
-        run: uv run coverage report || echo "Coverage check skipped (tests require external services)"
+        run: uv run coverage report || echo "Coverage skipped — tests require external services"
