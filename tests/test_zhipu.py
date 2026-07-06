@@ -1,14 +1,19 @@
 import asyncio
 import logging
 
+import pytest
+
 from wiki_service import WikiService
 
 logging.basicConfig(level=logging.INFO)
 
+
+@pytest.mark.skip(reason="Integration test requiring API keys")
 async def test():
     ws = WikiService()
-    print("Keys available:", len(ws.api_keys))
     res = await ws._call_llm_text("Say hi", "hi", max_retries=3)
-    print("Response:", res)
+    assert res is not None
 
-asyncio.run(test())
+
+if __name__ == "__main__":
+    asyncio.run(test())
